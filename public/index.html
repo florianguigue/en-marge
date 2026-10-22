@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#352c26" />
+    <meta
+      name="description"
+      content="Un endroit pour toutes vos envies de lecture. Découvrez des livres et composez votre liste à lire."
+    />
+    <title>En marge — Vos prochaines lectures</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Libre+Caslon+Display&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/style.css" />
+    <script type="module" src="/js/app.js"></script>
+  </head>
+  <body>
+    <aside class="sidebar">
+      <div class="brand-row">
+        <a href="#discover" class="brand" aria-label="En marge, accueil"
+          ><span class="brand-mark" aria-hidden="true"
+            ><svg viewBox="0 0 40 42">
+              <path
+                d="M5 6c7-2 11-1 15 3 4-4 8-5 15-3v27c-6-2-10-1-15 3-5-4-9-5-15-3V6Z"
+              />
+              <path d="M20 9v27M10 1v23l4-3 4 3V5" /></svg></span
+          ><span>en marge<span class="brand-dot">.</span></span></a
+        ><button
+          id="about-footer"
+          class="icon-btn mobile-info"
+          aria-label="À propos du stockage"
+        >
+          <span data-icon="info"></span>
+        </button>
+      </div>
+      <p class="brand-sub">VOTRE BIBLIOTHÈQUE D’ENVIES</p>
+      <div class="nav-label">PRENEZ LE TEMPS</div>
+      <nav aria-label="Navigation principale">
+        <button data-nav="discover" class="nav-item active">
+          <span data-icon="compass"></span>Découvrir<span
+            data-icon="arrow"
+            class="nav-arrow"
+          ></span></button
+        ><button data-nav="wishlist" class="nav-item">
+          <span data-icon="bookmark"></span>Ma liste à lire<span
+            id="nav-count"
+            class="count"
+            >0</span
+          >
+        </button>
+      </nav>
+      <div class="sidebar-bottom">
+        <span class="save-dot"></span
+        ><span
+          >Votre espace personnel<small
+            >Enregistré sur cet appareil</small
+          ></span
+        ><button id="about" class="icon-btn" aria-label="À propos du stockage">
+          <span data-icon="info"></span>
+        </button>
+      </div>
+    </aside>
+    <div class="app">
+      <main>
+        <section class="collection" aria-label="Découvrir des livres">
+          <div class="collection-search">
+            <form class="searchbar" id="search-form">
+              <span data-icon="search"></span
+              ><input
+                id="search"
+                type="search"
+                aria-label="Rechercher un livre"
+                placeholder="Un titre, un auteur, un ISBN…"
+                autocomplete="off"
+              /><button
+                id="search-clear"
+                type="button"
+                class="icon-btn"
+                aria-label="Effacer la recherche"
+                hidden
+              >
+                <span data-icon="x"></span></button
+              ><button class="search-submit" type="submit">
+                Rechercher <span data-icon="arrow"></span>
+              </button>
+            </form>
+            <button class="secondary" id="manual-open">
+              <span data-icon="plus"></span>Ajouter un livre
+            </button>
+          </div>
+          <div class="toolbar">
+            <div class="filters" role="group" aria-label="Filtrer par genre">
+              <button class="chip active" data-genre="Tous">
+                Tous les livres</button
+              ><button class="chip" data-genre="Roman">Romans</button
+              ><button class="chip" data-genre="Imaginaire">Imaginaire</button
+              ><button class="chip" data-genre="Essai">Essais</button
+              ><button class="chip" data-genre="Classique">Classiques</button
+              ><select id="extra-genre" aria-label="Autres genres">
+                <option value="">Autres genres</option>
+              </select>
+            </div>
+            <button
+              id="advanced-toggle"
+              class="icon-btn filter-toggle"
+              aria-label="Afficher les filtres supplémentaires"
+              aria-expanded="false"
+            >
+              <span data-icon="sliders"></span>
+            </button>
+          </div>
+          <div id="advanced" class="advanced" hidden>
+            <label
+              >Longueur<select
+                id="pages-filter"
+                aria-label="Filtrer par longueur"
+              >
+                <option value="all">Toutes les longueurs</option>
+                <option value="short">Moins de 250 pages</option>
+                <option value="medium">250 à 500 pages</option>
+                <option value="long">Plus de 500 pages</option>
+              </select></label
+            ><button id="reset-filters" class="text-btn">
+              Réinitialiser les filtres</button
+            ><span>Les pages peuvent varier selon l’édition.</span>
+          </div>
+          <div class="results-toolbar">
+            <span id="result-count" role="status" aria-live="polite"></span>
+            <div class="display-controls">
+              <label for="sort">Trier par</label
+              ><select id="sort">
+                <option value="default">Notre sélection</option>
+                <option value="title">Titre : A → Z</option>
+                <option value="author">Auteur : A → Z</option>
+                <option value="pages">Nombre de pages</option>
+                <option value="year">Parution récente</option>
+              </select>
+              <div
+                class="view-switch"
+                role="group"
+                aria-label="Mode d’affichage"
+              >
+                <button
+                  class="icon-btn active"
+                  id="grid-view"
+                  aria-label="Vue en grille"
+                  aria-pressed="true"
+                >
+                  <span data-icon="grid"></span></button
+                ><button
+                  class="icon-btn"
+                  id="list-view"
+                  aria-label="Vue en liste"
+                  aria-pressed="false"
+                >
+                  <span data-icon="list"></span>
+                </button>
+              </div>
+            </div>
+          </div>
+          <div id="search-notice" class="search-notice" hidden></div>
+          <div id="books" class="book-grid"></div>
+          <button class="secondary load-more" id="load-more" hidden>
+            Voir plus de résultats <span data-icon="plus"></span>
+          </button>
+        </section>
+      </main>
+    </div>
+    <dialog id="book-dialog" aria-labelledby="detail-title">
+      <button class="icon-btn close-dialog" aria-label="Fermer la fiche">
+        <span data-icon="x"></span>
+      </button>
+      <div id="book-detail"></div>
+    </dialog>
+    <dialog id="manual-dialog" aria-labelledby="manual-title">
+      <button class="icon-btn close-dialog" aria-label="Fermer le formulaire">
+        <span data-icon="x"></span>
+      </button>
+      <div class="form-heading">
+        <div class="eyebrow">UNE ENVIE À GARDER</div>
+        <h2 id="manual-title">Ajouter un livre</h2>
+        <p>Un livre aperçu en librairie ? Gardez-en une trace.</p>
+      </div>
+      <form id="manual-form">
+        <label
+          ><span class="field-label"
+            >Titre du livre <span class="required-mark">*</span></span
+          ><input
+            name="title"
+            required
+            maxlength="250"
+            placeholder="Le titre qui vous fait envie" /></label
+        ><label
+          ><span class="field-label"
+            >Auteur ou autrice <span class="required-mark">*</span></span
+          ><input
+            name="author"
+            required
+            maxlength="200"
+            placeholder="Prénom et nom"
+        /></label>
+        <div class="form-row">
+          <label
+            >Nombre de pages<input
+              name="pages"
+              type="number"
+              min="1"
+              max="100000"
+              placeholder="Ex. 320" /></label
+          ><label
+            >Année de parution<input
+              name="year"
+              type="number"
+              min="1"
+              max="2200"
+              placeholder="Ex. 2024"
+          /></label>
+        </div>
+        <label
+          >Tags, séparés par des virgules<input
+            name="tags"
+            maxlength="250"
+            placeholder="Roman, Voyage, Japon…" /></label
+        ><label
+          >Résumé<textarea
+            name="description"
+            rows="3"
+            maxlength="5000"
+            placeholder="Quelques mots pour vous en souvenir…"
+          ></textarea>
+        </label>
+        <p class="field-note">
+          * Champs obligatoires. Vous pourrez modifier cette fiche.
+        </p>
+        <button class="primary" type="submit">
+          <span data-icon="plus"></span>Ajouter à ma liste à lire
+        </button>
+      </form>
+    </dialog>
+    <dialog id="about-dialog" aria-labelledby="about-title">
+      <button class="icon-btn close-dialog" aria-label="Fermer">
+        <span data-icon="x"></span>
+      </button>
+      <div class="form-heading">
+        <div class="eyebrow">VOTRE ESPACE PERSONNEL</div>
+        <h2 id="about-title">Vos envies restent ici.</h2>
+        <p>
+          Votre liste est enregistrée dans ce navigateur, sur cet appareil. Elle
+          est retrouvée lors de votre prochaine visite, mais n’est pas
+          synchronisée entre vos appareils. Effacer les données du navigateur
+          efface aussi cette liste.
+        </p>
+        <p>
+          Seules les métadonnées sont conservées : aucun livre numérique n’est
+          hébergé. La recherche et les couvertures proviennent d’Open Library.
+          Les données manquantes sont signalées.
+        </p>
+        <button class="secondary" id="export">
+          Exporter ma liste (JSON) <span data-icon="arrow"></span>
+        </button>
+      </div>
+    </dialog>
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  </body>
+</html>

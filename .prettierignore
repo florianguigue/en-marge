@@ -1,0 +1,9 @@
+bun.lock
+node_modules/
+playwright-report/
+test-results/
+coverage/
+.openai/
+legacy/
+dist/
+En-marge.html
