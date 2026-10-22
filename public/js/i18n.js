@@ -21,11 +21,7 @@ export function resolveLanguage(preference, languages = [], fallbackLanguage) {
   return "fr";
 }
 
-export function initializeLanguage() {
-  let preference;
-  try {
-    preference = localStorage.getItem(LANGUAGE_STORAGE);
-  } catch {}
+export function initializeLanguage(preference) {
   language = resolveLanguage(
     preference,
     navigator.languages,

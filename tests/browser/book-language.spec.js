@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures.js";
 
 test.beforeEach(async ({ context }) => {
   await context.route(/https:\/\/(fonts\.|covers\.|openlibrary\.)/, (route) =>
@@ -138,9 +138,7 @@ test("search and saved works use matching editions, retaining status and tags ac
   await page.locator("#personal-tags").fill("Favori");
   await page.locator("#save-tags").click();
   await page.locator("#book-dialog .close-dialog").click();
-  const saved = await page.evaluate(() =>
-    localStorage.getItem("en-marge-wishlist-v1"),
-  );
+  const saved = (await (await page.request.get("/api/library")).json()).books;
   await page.locator("#language-select").selectOption("fr");
   await expect(page.locator(".book-title")).toHaveText("Le Livre des brumes");
   await expect(page.locator("#books [data-reading-status]")).toHaveValue(
@@ -157,9 +155,9 @@ test("search and saved works use matching editions, retaining status and tags ac
     "Un résumé en français.",
   );
   await page.locator("#book-dialog .close-dialog").click();
-  expect(
-    await page.evaluate(() => localStorage.getItem("en-marge-wishlist-v1")),
-  ).toBe(saved);
+  expect((await (await page.request.get("/api/library")).json()).books).toEqual(
+    saved,
+  );
   await page.locator("#language-select").selectOption("en");
   await expect(page.locator(".book-title")).toHaveText("The Book of Mists");
 });

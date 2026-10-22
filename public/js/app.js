@@ -7,6 +7,13 @@ import {
   loadBookEditions,
 } from "./book-editions.js";
 import { STORAGE, parseWishlist } from "./storage.js";
+import {
+  loadLibrary,
+  writeLibrary,
+  importLibrary,
+  loadSettings,
+  writeLanguage,
+} from "./api.js";
 import { parseBook, searchBooks } from "./open-library.js";
 import { READING_STATUSES, normalizeReadingStatus } from "./reading-status.js";
 import {
@@ -28,12 +35,46 @@ const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
 initializeLanguage();
 let saved = [];
-let storageOK = true;
+let revision = 0;
+let storageOK = false;
+let saving = false;
+let migrationFailed = false;
 try {
-  saved = parseWishlist(localStorage.getItem(STORAGE));
-} catch {
-  storageOK = false;
-}
+  const library = await loadLibrary();
+  saved = library.books;
+  revision = library.revision;
+  storageOK = true;
+  // Read the old browser data once; remove it only after a committed import.
+  let legacy;
+  try {
+    legacy = localStorage.getItem(STORAGE);
+  } catch {}
+  if (legacy) {
+    try {
+      const imported = await importLibrary(parseWishlist(legacy));
+      saved = imported.books;
+      revision = imported.revision;
+      localStorage.removeItem(STORAGE);
+    } catch {
+      migrationFailed = true;
+    }
+  }
+} catch {}
+try {
+  const settings = await loadSettings();
+  let preference = settings.language;
+  let legacy;
+  try {
+    legacy = localStorage.getItem(LANGUAGE_STORAGE);
+  } catch {}
+  if (!preference && ["fr", "en"].includes(legacy)) {
+    preference = (await writeLanguage(legacy)).language;
+  }
+  initializeLanguage(preference);
+  try {
+    localStorage.removeItem(LANGUAGE_STORAGE);
+  } catch {}
+} catch {}
 let state = {
   page: location.hash === "#discover" ? "discover" : "wishlist",
   genre: "Tous",
@@ -62,19 +103,42 @@ function hydrate() {
     .querySelectorAll("[data-icon]")
     .forEach((el) => (el.innerHTML = icon(el.dataset.icon)));
 }
-function save(next) {
-  try {
-    const books = next.map((book) => ({
-      ...book,
-      status: normalizeReadingStatus(book.status),
-    }));
-    localStorage.setItem(STORAGE, JSON.stringify(books));
-    saved = books;
-    return true;
-  } catch {
+async function save(next) {
+  if (!storageOK || saving) {
     toast("storageFailed");
     return false;
   }
+  saving = true;
+  try {
+    const library = await writeLibrary(next, revision);
+    saved = library.books;
+    revision = library.revision;
+    return true;
+  } catch (error) {
+    if (error.status === 409) {
+      await syncLibrary(true);
+      toast("storageConflict");
+    } else toast("storageFailed");
+    return false;
+  } finally {
+    saving = false;
+  }
+}
+async function syncLibrary(force = false) {
+  try {
+    const library = await loadLibrary();
+    if (saving && !force) return;
+    storageOK = true;
+    if (library.revision <= revision) return;
+    saved = library.books;
+    revision = library.revision;
+    render();
+    refreshSavedEditions();
+    if (detailId && $("#book-dialog").open) {
+      if (find(detailId)) showDetail(detailId, false);
+      else $("#book-dialog").close();
+    }
+  } catch {}
 }
 function findSaved(b) {
   return saved.find(
@@ -118,14 +182,16 @@ function renderReadingFilters() {
     })
     .join("");
 }
-function changeReadingStatus(control) {
+async function changeReadingStatus(control) {
   const id = control.dataset.readingStatus;
   const status = control.value;
   const book = saved.find((item) => item.id === id);
   if (!book || !Object.hasOwn(READING_STATUSES, status)) return;
   const inDialog = Boolean(control.closest("dialog"));
   if (
-    !save(saved.map((item) => (item.id === id ? { ...item, status } : item)))
+    !(await save(
+      saved.map((item) => (item.id === id ? { ...item, status } : item)),
+    ))
   ) {
     control.value = book.status;
     return;
@@ -374,20 +440,20 @@ function toast(key, undo, values = {}) {
     undo ? 8000 : 4200,
   );
 }
-function toggleSave(id) {
+async function toggleSave(id) {
   const b = find(id);
   if (!b) return;
   const existing = findSaved(b);
   if (existing) {
-    if (!save(saved.filter((s) => s.id !== existing.id))) return;
-    toast("bookRemoved", () => {
-      if (!isSaved(existing) && save([...saved, existing])) {
+    if (!(await save(saved.filter((s) => s.id !== existing.id)))) return;
+    toast("bookRemoved", async () => {
+      if (!isSaved(existing) && (await save([...saved, existing]))) {
         render();
         if (detailId) showDetail(detailId, false);
       }
     });
   } else {
-    if (!save([...saved, { ...b, addedAt: Date.now() }])) return;
+    if (!(await save([...saved, { ...b, addedAt: Date.now() }]))) return;
     toast("bookAdded");
   }
   render();
@@ -625,12 +691,13 @@ function refreshLanguage() {
   )
     search();
 }
-$("#language-select").addEventListener("change", (event) => {
-  if (!setLanguage(event.target.value)) return;
-  refreshLanguage();
+$("#language-select").addEventListener("change", async (event) => {
   try {
-    localStorage.setItem(LANGUAGE_STORAGE, getLanguage());
+    const settings = await writeLanguage(event.target.value);
+    setLanguage(settings.language);
+    refreshLanguage();
   } catch {
+    event.target.value = getLanguage();
     toast("languageNotSaved");
   }
 });
@@ -646,7 +713,7 @@ function manualOpen(b) {
   updateManualLabels();
   openDialog("#manual-dialog");
 }
-document.addEventListener("click", (e) => {
+document.addEventListener("click", async (e) => {
   const detail = e.target.closest("[data-detail]");
   const saveButton = e.target.closest("[data-save]");
   const nav = e.target.closest("[data-nav]");
@@ -681,7 +748,9 @@ document.addEventListener("click", (e) => {
           .filter(Boolean),
       ),
     ].slice(0, 15);
-    if (save(saved.map((b) => (b.id === detailId ? { ...b, tags } : b)))) {
+    if (
+      await save(saved.map((b) => (b.id === detailId ? { ...b, tags } : b)))
+    ) {
       render();
       showDetail(detailId, false);
       toast("tagsSaved");
@@ -767,7 +836,7 @@ $("#manual-open").onclick = () => manualOpen();
 $("#about").onclick = () => openDialog("#about-dialog");
 $("#about-footer").onclick = () => openDialog("#about-dialog");
 $("#load-more").onclick = () => search(true);
-$("#manual-form").onsubmit = (e) => {
+$("#manual-form").onsubmit = async (e) => {
   e.preventDefault();
   const data = new FormData(e.target);
   const title = data.get("title").trim(),
@@ -803,7 +872,7 @@ $("#manual-form").onsubmit = (e) => {
     return;
   }
   if (
-    save(
+    await save(
       editingId
         ? saved.map((b) => (b.id === editingId ? book : b))
         : [...saved, book],
@@ -828,28 +897,36 @@ window.addEventListener("hashchange", () => {
   const page = location.hash === "#discover" ? "discover" : "wishlist";
   if (page !== state.page) navigate(page);
 });
-window.addEventListener("storage", (e) => {
-  if (e.key === LANGUAGE_STORAGE) {
-    initializeLanguage();
-    refreshLanguage();
-    return;
-  }
-  if (e.key !== STORAGE && e.key !== null) return;
+async function syncSettings() {
   try {
-    saved = parseWishlist(e.newValue);
-    if (e.key === null) {
-      initializeLanguage();
+    const settings = await loadSettings();
+    if (settings.language && settings.language !== getLanguage()) {
+      setLanguage(settings.language);
       refreshLanguage();
-    } else {
-      render();
-      refreshSavedEditions();
-    }
-    if (detailId && $("#book-dialog").open) {
-      if (find(detailId)) showDetail(detailId, false);
-      else $("#book-dialog").close();
     }
   } catch {}
+}
+// Refresh from the server across tabs and devices without writing browser storage.
+window.addEventListener("focus", () => {
+  if (!saving) {
+    syncLibrary();
+    syncSettings();
+  }
 });
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden && !saving) {
+    syncLibrary();
+    syncSettings();
+  }
+});
+setInterval(() => {
+  if (!saving && !document.hidden) {
+    syncLibrary();
+    syncSettings();
+  }
+}, 3000);
 hydrate();
 refreshLanguage();
 if (!storageOK) toast("storageUnreadable");
+
+if (migrationFailed) toast("migrationFailed");

@@ -11,3 +11,8 @@ legacy/
 dist/
 En-marge.html
 *.log
+
+data/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal

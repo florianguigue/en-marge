@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures.js";
 import { readFile } from "node:fs/promises";
 
 test.beforeEach(async ({ context }) => {
@@ -8,7 +8,7 @@ test.beforeEach(async ({ context }) => {
   );
 });
 
-test("catalogue, filters, list view and browser persistence", async ({
+test("catalogue, filters, list view and server persistence", async ({
   page,
 }) => {
   await page.goto("/#discover");
@@ -219,17 +219,17 @@ test("old lists default to À lire and status changes synchronize between tabs",
   await otherPage.close();
 });
 
-test("an unavailable browser storage does not change the reading status", async ({
+test("an unavailable server does not change the reading status", async ({
   page,
 }) => {
   await page.goto("/#discover");
   await page.locator(".save-book").first().click();
   await page.getByRole("button", { name: /Ma bibliothèque/ }).click();
-  await page.evaluate(() => {
-    Storage.prototype.setItem = () => {
-      throw new Error("Storage unavailable");
-    };
-  });
+  await page.route("**/api/library", (route) =>
+    route.request().method() === "PUT"
+      ? route.fulfill({ status: 503, json: { error: "Unavailable" } })
+      : route.continue(),
+  );
   const status = page.locator("#books [data-reading-status]");
   await status.selectOption("reading");
   await expect(status).toHaveValue("to-read");
