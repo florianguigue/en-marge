@@ -1,7 +1,7 @@
 # En marge
 
 Une bibliothèque d’envies de lecture : sélection de livres, recherche Open Library,
-fiches détaillées, ajout manuel, modification, tags, filtres, tri et export JSON.
+fiches détaillées, ajout manuel, modification, statuts de lecture, tags, filtres, tri et export JSON.
 L’interface existante est conservée, sur ordinateur et mobile.
 
 L’application est écrite en JavaScript natif : modules ES côté navigateur et serveur
@@ -94,9 +94,13 @@ public/
   style.css             Styles et adaptation mobile
   js/
     app.js              Interface, navigation et interactions
-    catalogue.js        Sélection de livres et palette
+    catalogue.js        Sélection de fantasy et éditions françaises/anglaises
+    book-editions.js    Affichage des livres dans la langue sélectionnée
     icons.js            Icônes SVG
+    i18n.js             Choix de langue et traduction de l’interface
+    messages.js         Textes français et anglais
     open-library.js     Recherche et normalisation des métadonnées
+    reading-status.js   Statuts de lecture et valeurs par défaut
     storage.js          Lecture et validation des listes existantes
     utils.js            Échappement HTML et normalisation du texte
 src/server.js           Serveur HTTP Bun
@@ -109,6 +113,53 @@ compose.yaml
 Les anciens fichiers `En-marge.html`, `dist/` et `.openai/` sont conservés localement
 comme références et ignorés par Git. Ils ne sont plus utilisés pour le lancement.
 Les sources à modifier sont désormais dans `public/` et `src/`.
+
+## Langues et page d’accueil
+
+La page d’accueil ouvre **Ma bibliothèque**. Les liens directs `#discover` et
+`#wishlist` continuent d’ouvrir les onglets correspondants.
+
+L’interface est disponible en français et en anglais. Sans choix manuel, elle
+utilise la première langue française ou anglaise reconnue dans les préférences
+du navigateur (`navigator.languages`, puis `navigator.language`). Si aucune
+langue prise en charge n’est identifiée, le français prévaut. La locale française
+est explicitement `fr-FR`, y compris pour le document HTML et le formatage des
+nombres, quelle que soit la variante de français du navigateur.
+
+Le sélecteur de la barre latérale permet de changer la langue immédiatement,
+sur ordinateur et mobile. Le choix est mémorisé localement sous la clé
+`en-marge-language-v1` et prévaut sur la langue du navigateur. Si le stockage est
+indisponible, le changement reste valable pour la page ouverte.
+
+Les livres de la sélection disposent de titres, résumés, couvertures et références
+d’édition en français et en anglais. Le changement de langue adapte aussi leur
+affichage dans la bibliothèque, en conservant leurs statuts et tags personnels.
+
+La recherche Open Library privilégie les éditions dans la langue sélectionnée
+sans exclure les livres dont la langue est absente ou différente. Elle utilise
+le titre, la couverture et l’ISBN de l’édition correspondante lorsqu’elle existe,
+sinon ceux de l’édition proposée par Open Library. Une langue absente est
+signalée, sans être déduite de la langue de l’interface. La recherche d’une
+traduction d’un livre déjà enregistré conserve, elle, un filtre strict pour
+éviter d’associer une édition dans la mauvaise langue. Une
+recherche déjà affichée est relancée lors d’un changement de langue. Pour les
+autres livres enregistrés, les éditions correspondantes sont recherchées à
+l’ouverture et lors du changement de langue, puis mises en cache en mémoire.
+Si aucune édition n’est disponible, l’édition d’origine reste visible avec la
+mention « Édition d’origine ». Les fiches saisies manuellement conservent leur
+contenu. Les métadonnées enregistrées et l’export restent fidèles aux livres
+ajoutés ; les versions affichées ne réécrivent pas la liste.
+
+## Statuts de lecture
+
+Les livres ajoutés à la liste commencent au statut **À lire**. Un menu sur chaque
+livre de la liste et dans sa fiche permet de passer à **En cours**, **Lu** ou
+**Abandonné**, et de revenir à un statut précédent si nécessaire. Les filtres de
+statut permettent de retrouver chaque groupe de livres.
+
+Les listes existantes sont conservées : un livre sans statut est considéré comme
+**À lire**. Les statuts sont enregistrés avec les livres dans le navigateur et
+inclus dans l’export JSON (`to-read`, `reading`, `read`, `abandoned`).
 
 ## Données
 

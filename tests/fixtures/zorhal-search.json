@@ -1,0 +1,77 @@
+{
+  "numFound": 3,
+  "start": 0,
+  "numFoundExact": true,
+  "num_found": 3,
+  "documentation_url": "https://openlibrary.org/dev/docs/api/search",
+  "q": "Zorhal",
+  "offset": null,
+  "docs": [
+    {
+      "author_name": ["Tugu Lucum", "Clémence Kinoe"],
+      "first_publish_year": 2026,
+      "isbn": ["9791097908140"],
+      "key": "/works/OL45612825W",
+      "language": ["fre"],
+      "title": "Zorhal",
+      "editions": {
+        "numFound": 1,
+        "start": 0,
+        "numFoundExact": true,
+        "docs": [
+          {
+            "key": "/books/OL62114704M",
+            "title": "Zorhal",
+            "language": ["fre"],
+            "publisher": ["CLÉMENCE KINOE"],
+            "isbn": ["9791097908140"]
+          }
+        ]
+      }
+    },
+    {
+      "author_name": ["Clémence Kinoe"],
+      "cover_i": 15222016,
+      "first_publish_year": 2026,
+      "isbn": ["9791097908133"],
+      "key": "/works/OL45481542W",
+      "title": "Zorhal T.2",
+      "editions": {
+        "numFound": 1,
+        "start": 0,
+        "numFoundExact": true,
+        "docs": [
+          {
+            "key": "/books/OL61963652M",
+            "title": "Zorhal T.2",
+            "cover_i": 15222016,
+            "publisher": ["Auto-édition"],
+            "isbn": ["9791097908133"]
+          }
+        ]
+      }
+    },
+    {
+      "author_name": ["Clémence Kinoe"],
+      "cover_i": 15222017,
+      "first_publish_year": 2026,
+      "isbn": ["9791097908157"],
+      "key": "/works/OL45481563W",
+      "title": "Zorhal T.3",
+      "editions": {
+        "numFound": 1,
+        "start": 0,
+        "numFoundExact": true,
+        "docs": [
+          {
+            "key": "/books/OL61963675M",
+            "title": "Zorhal T.3",
+            "cover_i": 15222017,
+            "publisher": ["Auto-édition"],
+            "isbn": ["9791097908157"]
+          }
+        ]
+      }
+    }
+  ]
+}

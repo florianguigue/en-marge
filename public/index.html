@@ -1,18 +1,19 @@
 <!doctype html>
-<html lang="fr">
+<html lang="fr-FR">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#352c26" />
     <meta
       name="description"
-      content="Un endroit pour toutes vos envies de lecture. Découvrez des livres et composez votre liste à lire."
+      content="Un endroit pour toutes vos envies de lecture. Découvrez des livres et composez votre bibliothèque."
+      data-i18n-content="metaDescription"
     />
-    <title>En marge — Vos prochaines lectures</title>
+    <title data-i18n="pageTitle">En marge — Vos prochaines lectures</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Libre+Caslon+Display&display=swap"
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&amp;family=Libre+Caslon+Display&amp;display=swap"
       rel="stylesheet"
     />
     <link rel="stylesheet" href="/style.css" />
@@ -21,52 +22,82 @@
   <body>
     <aside class="sidebar">
       <div class="brand-row">
-        <a href="#discover" class="brand" aria-label="En marge, accueil"
+        <a
+          href="#wishlist"
+          class="brand"
+          aria-label="En marge, accueil"
+          data-i18n-aria-label="home"
           ><span class="brand-mark" aria-hidden="true"
             ><svg viewBox="0 0 40 42">
               <path
                 d="M5 6c7-2 11-1 15 3 4-4 8-5 15-3v27c-6-2-10-1-15 3-5-4-9-5-15-3V6Z"
-              />
-              <path d="M20 9v27M10 1v23l4-3 4 3V5" /></svg></span
+              ></path>
+              <path d="M20 9v27M10 1v23l4-3 4 3V5"></path></svg></span
           ><span>en marge<span class="brand-dot">.</span></span></a
         ><button
           id="about-footer"
           class="icon-btn mobile-info"
           aria-label="À propos du stockage"
+          data-i18n-aria-label="aboutStorage"
         >
           <span data-icon="info"></span>
         </button>
       </div>
-      <p class="brand-sub">VOTRE BIBLIOTHÈQUE D’ENVIES</p>
-      <div class="nav-label">PRENEZ LE TEMPS</div>
-      <nav aria-label="Navigation principale">
-        <button data-nav="discover" class="nav-item active">
-          <span data-icon="compass"></span>Découvrir<span
-            data-icon="arrow"
-            class="nav-arrow"
-          ></span></button
-        ><button data-nav="wishlist" class="nav-item">
-          <span data-icon="bookmark"></span>Ma liste à lire<span
-            id="nav-count"
-            class="count"
-            >0</span
-          >
+      <p class="brand-sub" data-i18n="brandSubtitle">
+        VOTRE BIBLIOTHÈQUE D’ENVIES
+      </p>
+      <div class="nav-label" data-i18n="takeYourTime">PRENEZ LE TEMPS</div>
+      <nav
+        aria-label="Navigation principale"
+        data-i18n-aria-label="mainNavigation"
+      >
+        <button data-nav="discover" class="nav-item">
+          <span data-icon="compass"></span
+          ><span data-i18n="discover">Découvrir</span
+          ><span data-icon="arrow" class="nav-arrow"></span></button
+        ><button data-nav="wishlist" class="nav-item active">
+          <span data-icon="library"></span
+          ><span data-i18n="library">Ma bibliothèque</span
+          ><span id="nav-count" class="count">0</span>
         </button>
       </nav>
+      <div class="sidebar-tools">
+        <label class="language-picker" for="language-select">
+          <span data-i18n="language">Langue</span>
+          <select
+            id="language-select"
+            data-i18n-aria-label="language"
+            aria-label="Langue"
+          >
+            <option value="fr" lang="fr-FR">Français</option>
+            <option value="en" lang="en">English</option>
+          </select>
+        </label>
+      </div>
       <div class="sidebar-bottom">
         <span class="save-dot"></span
         ><span
-          >Votre espace personnel<small
+          ><span data-i18n="personalSpace">Votre espace personnel</span
+          ><small data-i18n="savedOnDevice"
             >Enregistré sur cet appareil</small
           ></span
-        ><button id="about" class="icon-btn" aria-label="À propos du stockage">
+        ><button
+          id="about"
+          class="icon-btn"
+          aria-label="À propos du stockage"
+          data-i18n-aria-label="aboutStorage"
+        >
           <span data-icon="info"></span>
         </button>
       </div>
     </aside>
     <div class="app">
       <main>
-        <section class="collection" aria-label="Découvrir des livres">
+        <section
+          class="collection"
+          aria-label="Ma bibliothèque"
+          data-i18n-aria-label="library"
+        >
           <div class="collection-search">
             <form class="searchbar" id="search-form">
               <span data-icon="search"></span
@@ -74,34 +105,68 @@
                 id="search"
                 type="search"
                 aria-label="Rechercher un livre"
-                placeholder="Un titre, un auteur, un ISBN…"
+                placeholder="Rechercher dans ma bibliothèque…"
                 autocomplete="off"
+                data-i18n-aria-label="searchBook"
+                data-i18n-placeholder="searchLibrary"
               /><button
                 id="search-clear"
                 type="button"
                 class="icon-btn"
                 aria-label="Effacer la recherche"
                 hidden
+                data-i18n-aria-label="clearSearch"
               >
                 <span data-icon="x"></span></button
               ><button class="search-submit" type="submit">
-                Rechercher <span data-icon="arrow"></span>
+                <span data-i18n="search">Rechercher</span
+                ><span data-icon="arrow"></span>
               </button>
             </form>
             <button class="secondary" id="manual-open">
-              <span data-icon="plus"></span>Ajouter un livre
+              <span data-icon="plus"></span
+              ><span data-i18n="addBook">Ajouter un livre</span>
             </button>
           </div>
+          <div
+            id="reading-filters"
+            class="reading-filters"
+            role="group"
+            aria-label="Filtrer par statut de lecture"
+            hidden
+            data-i18n-aria-label="filterStatuses"
+          ></div>
           <div class="toolbar">
-            <div class="filters" role="group" aria-label="Filtrer par genre">
-              <button class="chip active" data-genre="Tous">
+            <div
+              class="filters"
+              role="group"
+              aria-label="Filtrer par genre"
+              data-i18n-aria-label="filterGenres"
+            >
+              <button
+                class="chip active"
+                data-genre="Tous"
+                data-i18n="allBooks"
+              >
                 Tous les livres</button
-              ><button class="chip" data-genre="Roman">Romans</button
-              ><button class="chip" data-genre="Imaginaire">Imaginaire</button
-              ><button class="chip" data-genre="Essai">Essais</button
-              ><button class="chip" data-genre="Classique">Classiques</button
-              ><select id="extra-genre" aria-label="Autres genres">
-                <option value="">Autres genres</option>
+              ><button class="chip" data-genre="Roman" data-i18n="novels">
+                Romans</button
+              ><button
+                class="chip"
+                data-genre="Imaginaire"
+                data-i18n="genre.Imaginaire"
+              >
+                Imaginaire</button
+              ><button class="chip" data-genre="Essai" data-i18n="essays">
+                Essais</button
+              ><button class="chip" data-genre="Classique" data-i18n="classics">
+                Classiques</button
+              ><select
+                id="extra-genre"
+                aria-label="Autres genres"
+                data-i18n-aria-label="otherGenres"
+              >
+                <option value="" data-i18n="otherGenres">Autres genres</option>
               </select>
             </div>
             <button
@@ -109,46 +174,75 @@
               class="icon-btn filter-toggle"
               aria-label="Afficher les filtres supplémentaires"
               aria-expanded="false"
+              data-i18n-aria-label="showFilters"
             >
               <span data-icon="sliders"></span>
             </button>
           </div>
           <div id="advanced" class="advanced" hidden>
             <label
-              >Longueur<select
+              ><span data-i18n="length">Longueur</span
+              ><select
                 id="pages-filter"
                 aria-label="Filtrer par longueur"
+                data-i18n-aria-label="filterLength"
               >
-                <option value="all">Toutes les longueurs</option>
-                <option value="short">Moins de 250 pages</option>
-                <option value="medium">250 à 500 pages</option>
-                <option value="long">Plus de 500 pages</option>
+                <option value="all" data-i18n="allLengths">
+                  Toutes les longueurs
+                </option>
+                <option value="short" data-i18n="shortBooks">
+                  Moins de 250 pages
+                </option>
+                <option value="medium" data-i18n="mediumBooks">
+                  250 à 500 pages
+                </option>
+                <option value="long" data-i18n="longBooks">
+                  Plus de 500 pages
+                </option>
               </select></label
-            ><button id="reset-filters" class="text-btn">
+            ><button
+              id="reset-filters"
+              class="text-btn"
+              data-i18n="resetFilters"
+            >
               Réinitialiser les filtres</button
-            ><span>Les pages peuvent varier selon l’édition.</span>
+            ><span data-i18n="pagesVary"
+              >Les pages peuvent varier selon l’édition.</span
+            >
           </div>
           <div class="results-toolbar">
             <span id="result-count" role="status" aria-live="polite"></span>
             <div class="display-controls">
-              <label for="sort">Trier par</label
+              <label for="sort" data-i18n="sortBy">Trier par</label
               ><select id="sort">
-                <option value="default">Notre sélection</option>
-                <option value="title">Titre : A → Z</option>
-                <option value="author">Auteur : A → Z</option>
-                <option value="pages">Nombre de pages</option>
-                <option value="year">Parution récente</option>
+                <option value="default" data-i18n="ourSelection">
+                  Notre sélection
+                </option>
+                <option value="title" data-i18n="sortTitle">
+                  Titre : A → Z
+                </option>
+                <option value="author" data-i18n="sortAuthor">
+                  Auteur : A → Z
+                </option>
+                <option value="pages" data-i18n="pageNumber">
+                  Nombre de pages
+                </option>
+                <option value="year" data-i18n="sortYear">
+                  Parution récente
+                </option>
               </select>
               <div
                 class="view-switch"
                 role="group"
                 aria-label="Mode d’affichage"
+                data-i18n-aria-label="displayMode"
               >
                 <button
                   class="icon-btn active"
                   id="grid-view"
                   aria-label="Vue en grille"
                   aria-pressed="true"
+                  data-i18n-aria-label="gridView"
                 >
                   <span data-icon="grid"></span></button
                 ><button
@@ -156,6 +250,7 @@
                   id="list-view"
                   aria-label="Vue en liste"
                   aria-pressed="false"
+                  data-i18n-aria-label="listView"
                 >
                   <span data-icon="list"></span>
                 </button>
@@ -165,102 +260,133 @@
           <div id="search-notice" class="search-notice" hidden></div>
           <div id="books" class="book-grid"></div>
           <button class="secondary load-more" id="load-more" hidden>
-            Voir plus de résultats <span data-icon="plus"></span>
+            <span data-i18n="moreResults">Voir plus de résultats</span
+            ><span data-icon="plus"></span>
           </button>
         </section>
       </main>
     </div>
     <dialog id="book-dialog" aria-labelledby="detail-title">
-      <button class="icon-btn close-dialog" aria-label="Fermer la fiche">
+      <button
+        class="icon-btn close-dialog"
+        aria-label="Fermer la fiche"
+        data-i18n-aria-label="closeDetail"
+      >
         <span data-icon="x"></span>
       </button>
       <div id="book-detail"></div>
     </dialog>
     <dialog id="manual-dialog" aria-labelledby="manual-title">
-      <button class="icon-btn close-dialog" aria-label="Fermer le formulaire">
+      <button
+        class="icon-btn close-dialog"
+        aria-label="Fermer le formulaire"
+        data-i18n-aria-label="closeForm"
+      >
         <span data-icon="x"></span>
       </button>
       <div class="form-heading">
-        <div class="eyebrow">UNE ENVIE À GARDER</div>
-        <h2 id="manual-title">Ajouter un livre</h2>
-        <p>Un livre aperçu en librairie ? Gardez-en une trace.</p>
+        <div class="eyebrow" data-i18n="keepAnIdea">UNE ENVIE À GARDER</div>
+        <h2 id="manual-title" data-i18n="addBook">Ajouter un livre</h2>
+        <p data-i18n="manualIntro">
+          Un livre aperçu en librairie ? Gardez-en une trace.
+        </p>
       </div>
       <form id="manual-form">
         <label
           ><span class="field-label"
-            >Titre du livre <span class="required-mark">*</span></span
+            ><span data-i18n="bookTitle">Titre du livre</span
+            ><span class="required-mark">*</span></span
           ><input
             name="title"
             required
             maxlength="250"
-            placeholder="Le titre qui vous fait envie" /></label
+            placeholder="Le titre qui vous fait envie"
+            data-i18n-placeholder="titlePlaceholder" /></label
         ><label
           ><span class="field-label"
-            >Auteur ou autrice <span class="required-mark">*</span></span
+            ><span data-i18n="author">Auteur ou autrice</span
+            ><span class="required-mark">*</span></span
           ><input
             name="author"
             required
             maxlength="200"
             placeholder="Prénom et nom"
+            data-i18n-placeholder="authorPlaceholder"
         /></label>
         <div class="form-row">
           <label
-            >Nombre de pages<input
+            ><span data-i18n="pageNumber">Nombre de pages</span
+            ><input
               name="pages"
               type="number"
               min="1"
               max="100000"
-              placeholder="Ex. 320" /></label
+              placeholder="Ex. 320"
+              data-i18n-placeholder="examplePages" /></label
           ><label
-            >Année de parution<input
+            ><span data-i18n="year">Année de parution</span
+            ><input
               name="year"
               type="number"
               min="1"
               max="2200"
               placeholder="Ex. 2024"
+              data-i18n-placeholder="exampleYear"
           /></label>
         </div>
         <label
-          >Tags, séparés par des virgules<input
+          ><span data-i18n="tagsComma">Tags, séparés par des virgules</span
+          ><input
             name="tags"
             maxlength="250"
-            placeholder="Roman, Voyage, Japon…" /></label
+            placeholder="Roman, Voyage, Japon…"
+            data-i18n-placeholder="tagsPlaceholder" /></label
         ><label
-          >Résumé<textarea
+          ><span data-i18n="summary">Résumé</span
+          ><textarea
             name="description"
             rows="3"
             maxlength="5000"
             placeholder="Quelques mots pour vous en souvenir…"
+            data-i18n-placeholder="summaryPlaceholder"
           ></textarea>
         </label>
-        <p class="field-note">
+        <p class="field-note" data-i18n="requiredFields">
           * Champs obligatoires. Vous pourrez modifier cette fiche.
         </p>
         <button class="primary" type="submit">
-          <span data-icon="plus"></span>Ajouter à ma liste à lire
+          <span data-icon="plus"></span
+          ><span data-i18n="addToLibrary">Ajouter à ma bibliothèque</span>
         </button>
       </form>
     </dialog>
     <dialog id="about-dialog" aria-labelledby="about-title">
-      <button class="icon-btn close-dialog" aria-label="Fermer">
+      <button
+        class="icon-btn close-dialog"
+        aria-label="Fermer"
+        data-i18n-aria-label="close"
+      >
         <span data-icon="x"></span>
       </button>
       <div class="form-heading">
-        <div class="eyebrow">VOTRE ESPACE PERSONNEL</div>
-        <h2 id="about-title">Vos envies restent ici.</h2>
-        <p>
+        <div class="eyebrow" data-i18n="aboutEyebrow">
+          VOTRE ESPACE PERSONNEL
+        </div>
+        <h2 id="about-title" data-i18n="aboutTitle">Vos envies restent ici.</h2>
+        <p data-i18n="aboutStorageText">
           Votre liste est enregistrée dans ce navigateur, sur cet appareil. Elle
           est retrouvée lors de votre prochaine visite, mais n’est pas
           synchronisée entre vos appareils. Effacer les données du navigateur
           efface aussi cette liste.
         </p>
-        <p>
+        <p data-i18n="aboutMetadata">
           Seules les métadonnées sont conservées : aucun livre numérique n’est
           hébergé. La recherche et les couvertures proviennent d’Open Library.
           Les données manquantes sont signalées.
         </p>
         <button class="secondary" id="export">
-          Exporter ma liste (JSON) <span data-icon="arrow"></span>
+          <span data-i18n="export">Exporter ma liste (JSON)</span
+          ><span data-icon="arrow"></span>
         </button>
       </div>
     </dialog>

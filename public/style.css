@@ -1492,6 +1492,58 @@ dialog::backdrop {
   align-items: center;
   justify-content: space-between;
 }
+
+.reading-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 20px;
+}
+.reading-filter {
+  border-color: var(--line);
+}
+.reading-count {
+  margin-left: 5px;
+  opacity: 0.75;
+  font-variant-numeric: tabular-nums;
+}
+.reading-status {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 14px;
+  max-width: 100%;
+  --status-color: #786044;
+  --status-bg: #ebe3d4;
+}
+.reading-status > span {
+  font-size: 10px;
+  color: var(--muted);
+}
+.reading-status select {
+  max-width: 100%;
+  min-height: 36px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 7px 10px;
+  background: var(--status-bg);
+  color: var(--status-color);
+  font-size: 12px;
+  cursor: pointer;
+}
+.status-reading {
+  --status-color: #77562b;
+  --status-bg: #f0e2c7;
+}
+.status-read {
+  --status-color: #435b3b;
+  --status-bg: #dfe7d8;
+}
+.status-abandoned {
+  --status-color: #82584b;
+  --status-bg: #edddd5;
+}
 .mobile-info {
   display: none;
   color: #cbbcaa;
@@ -1503,4 +1555,50 @@ dialog::backdrop {
   .mobile-info {
     display: inline-grid;
   }
+}
+
+.sidebar-tools {
+  margin-top: auto;
+  padding-top: 24px;
+}
+.language-picker {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 11px;
+  color: #cbbcaa;
+}
+.language-picker select {
+  min-height: 36px;
+  max-width: 130px;
+  padding: 6px 10px;
+  border: 1px solid #86715a77;
+  border-radius: 4px;
+  background: #3e342a;
+  color: #fff2df;
+  cursor: pointer;
+}
+.sidebar-bottom {
+  margin-top: 18px;
+}
+#manual-form label > [data-i18n],
+#manual-form .field-label > [data-i18n] {
+  color: var(--ink);
+}
+@media (max-width: 760px) {
+  .sidebar-tools {
+    margin-top: 0;
+    padding: 12px 0;
+  }
+  .language-picker {
+    justify-content: flex-end;
+  }
+}
+
+.book-edition-note {
+  display: block;
+  margin-top: 10px;
+  font-size: 10px;
+  color: var(--muted);
 }

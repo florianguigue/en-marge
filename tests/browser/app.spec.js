@@ -11,15 +11,18 @@ test.beforeEach(async ({ context }) => {
 test("catalogue, filters, list view and browser persistence", async ({
   page,
 }) => {
-  await page.goto("/");
+  await page.goto("/#discover");
   await expect(page.locator(".book-card")).toHaveCount(8);
-  await page.getByRole("button", { name: "Imaginaire", exact: true }).click();
-  await expect(page.locator(".book-card")).toHaveCount(1);
+  await expect(page.locator(".book-category")).toHaveText(
+    Array(8).fill("Fantasy"),
+  );
+  await page.getByRole("button", { name: "Classiques", exact: true }).click();
+  await expect(page.locator(".book-card")).toHaveCount(2);
   await page
     .getByRole("button", { name: "Tous les livres", exact: true })
     .click();
   await page.locator(".save-book").first().click();
-  await page.getByRole("button", { name: /Ma liste à lire/ }).click();
+  await page.getByRole("button", { name: /Ma bibliothèque/ }).click();
   await expect(page.locator(".book-card")).toHaveCount(1);
   await page.getByRole("button", { name: "Vue en liste", exact: true }).click();
   await expect(page.locator("#books")).toHaveClass("book-grid list");
@@ -37,7 +40,7 @@ test("catalogue, filters, list view and browser persistence", async ({
 });
 
 test("manual add, edit, tags and JSON export", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/#discover");
   await page
     .getByRole("button", { name: "Ajouter un livre", exact: true })
     .click();
@@ -46,8 +49,9 @@ test("manual add, edit, tags and JSON export", async ({ page }) => {
   await page.locator('[name="pages"]').fill("120");
   await page.locator('[name="tags"]').fill("Roman, Voyage");
   await page
-    .getByRole("button", { name: "Ajouter à ma liste à lire", exact: true })
+    .getByRole("button", { name: "Ajouter à ma bibliothèque", exact: true })
     .click();
+  await page.locator("#books [data-reading-status]").selectOption("reading");
   await page.locator(".book-title").click();
   await page.getByRole("button", { name: "Modifier", exact: true }).click();
   await page.locator('[name="title"]').fill("Mon livre modifié");
@@ -72,6 +76,7 @@ test("manual add, edit, tags and JSON export", async ({ page }) => {
   expect(saved).toHaveLength(1);
   expect(saved[0].title).toBe("Mon livre modifié");
   expect(saved[0].tags).toEqual(["Nature", "Essai"]);
+  expect(saved[0].status).toBe("reading");
 });
 
 test("Open Library results and pagination", async ({ page }) => {
@@ -91,7 +96,7 @@ test("Open Library results and pagination", async ({ page }) => {
       },
     });
   });
-  await page.goto("/");
+  await page.goto("/#discover");
   await page.locator("#search").fill("Dune");
   await page.locator("#search-form").evaluate((form) => form.requestSubmit());
   await expect(page.locator(".book-title")).toHaveText("Dune");
@@ -103,14 +108,14 @@ test("Open Library results and pagination", async ({ page }) => {
 test("unavailable search falls back to the local catalogue", async ({
   page,
 }) => {
-  await page.goto("/");
-  await page.locator("#search").fill("Camus");
+  await page.goto("/#discover");
+  await page.locator("#search").fill("Tolkien");
   await page.locator("#search-form").evaluate((form) => form.requestSubmit());
   await expect(page.locator("#search-notice")).toContainText(
     "Open Library est indisponible",
   );
   await expect(page.locator(".book-card")).toHaveCount(1);
-  await expect(page.locator(".book-title")).toHaveText("L’Étranger");
+  await expect(page.locator(".book-title")).toHaveText("Le Hobbit");
 });
 
 test("navigation cancels an in-flight search without replacing the wishlist", async ({
@@ -128,15 +133,109 @@ test("navigation cancels an in-flight search without replacing the wishlist", as
       })
       .catch(() => {});
   });
-  await page.goto("/");
+  await page.goto("/#discover");
   await page.locator("#search").fill("Dune");
   const request = page.waitForRequest("https://openlibrary.org/search.json?*");
   await page.locator("#search-form").evaluate((form) => form.requestSubmit());
   await request;
-  await page.getByRole("button", { name: /Ma liste à lire/ }).click();
+  await page.getByRole("button", { name: /Ma bibliothèque/ }).click();
   release();
   await expect(page.locator("#result-count")).toHaveText(
-    "0 livre dans votre liste",
+    "0 livre dans votre bibliothèque",
   );
   await expect(page.locator("#search-notice")).toBeHidden();
+});
+
+test("reading statuses, filters and persistence from cards and details", async ({
+  page,
+}) => {
+  await page.goto("/#discover");
+  await expect(page.locator("#reading-filters")).toBeHidden();
+  await page.locator(".save-book").first().click();
+  await page.getByRole("button", { name: /Ma bibliothèque/ }).click();
+  const status = page.locator("#books [data-reading-status]");
+  await expect(status).toHaveValue("to-read");
+  await status.selectOption("reading");
+  await page.locator(".book-title").click();
+  const detailStatus = page.locator("#book-dialog [data-reading-status]");
+  await expect(detailStatus).toHaveValue("reading");
+  await detailStatus.selectOption("read");
+  await expect(detailStatus).toHaveValue("read");
+  await page.locator("#book-dialog .close-dialog").click();
+  await page.locator('[data-reading-filter="to-read"]').click();
+  await expect(page.locator(".book-card")).toHaveCount(0);
+  await page.locator('[data-reading-filter="read"]').click();
+  await expect(page.locator(".book-card")).toHaveCount(1);
+  await expect(page.locator('[data-reading-filter="read"]')).toHaveText("Lu 1");
+  await page.getByRole("button", { name: "Vue en liste", exact: true }).click();
+  await status.selectOption("abandoned");
+  await expect(page.locator(".book-card")).toHaveCount(0);
+  await page.locator('[data-reading-filter="abandoned"]').click();
+  await expect(status).toHaveValue("abandoned");
+  await page.reload();
+  await expect(status).toHaveValue("abandoned");
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+  await status.selectOption("to-read");
+  await page.reload();
+  await expect(status).toHaveValue("to-read");
+});
+
+test("old lists default to À lire and status changes synchronize between tabs", async ({
+  page,
+  context,
+}) => {
+  await page.goto("/#discover");
+  await page.evaluate(() => {
+    localStorage.setItem(
+      "en-marge-wishlist-v1",
+      JSON.stringify([
+        {
+          id: "manual:legacy",
+          title: "Ancien livre",
+          author: "Une autrice",
+          manual: true,
+        },
+      ]),
+    );
+  });
+  await page.goto("/#wishlist");
+  await page.reload();
+  const status = page.locator("#books [data-reading-status]");
+  await expect(status).toHaveValue("to-read");
+  const otherPage = await context.newPage();
+  await otherPage.goto("/#wishlist");
+  await otherPage.locator(".book-title").click();
+  await status.selectOption("reading");
+  await expect(
+    otherPage.locator("#book-dialog [data-reading-status]"),
+  ).toHaveValue("reading");
+  await expect(otherPage.locator("#books [data-reading-status]")).toHaveValue(
+    "reading",
+  );
+  await otherPage.close();
+});
+
+test("an unavailable browser storage does not change the reading status", async ({
+  page,
+}) => {
+  await page.goto("/#discover");
+  await page.locator(".save-book").first().click();
+  await page.getByRole("button", { name: /Ma bibliothèque/ }).click();
+  await page.evaluate(() => {
+    Storage.prototype.setItem = () => {
+      throw new Error("Storage unavailable");
+    };
+  });
+  const status = page.locator("#books [data-reading-status]");
+  await status.selectOption("reading");
+  await expect(status).toHaveValue("to-read");
+  await expect(page.locator("#toast")).toContainText(
+    "Votre liste n’a pas été modifiée",
+  );
+  await page.reload();
+  await expect(status).toHaveValue("to-read");
 });

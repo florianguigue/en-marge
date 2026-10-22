@@ -1,11 +1,32 @@
 import { icon } from "./icons.js";
 import { esc, normal } from "./utils.js";
 import { catalogue, palette } from "./catalogue.js";
+import {
+  getCatalogue,
+  localizeBook,
+  loadBookEditions,
+} from "./book-editions.js";
 import { STORAGE, parseWishlist } from "./storage.js";
 import { parseBook, searchBooks } from "./open-library.js";
+import { READING_STATUSES, normalizeReadingStatus } from "./reading-status.js";
+import {
+  LANGUAGE_STORAGE,
+  initializeLanguage,
+  getLanguage,
+  getLocale,
+  setLanguage,
+  t,
+  formatNumber,
+  pluralKey,
+  bookCount,
+  pageCount,
+  genreLabel,
+  applyTranslations,
+} from "./i18n.js";
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
+initializeLanguage();
 let saved = [];
 let storageOK = true;
 try {
@@ -14,21 +35,26 @@ try {
   storageOK = false;
 }
 let state = {
-  page: location.hash === "#wishlist" ? "wishlist" : "discover",
+  page: location.hash === "#discover" ? "discover" : "wishlist",
   genre: "Tous",
   pages: "all",
+  readingStatus: "all",
   query: "",
   view: "grid",
   sort: "default",
   remote: null,
   remoteTotal: 0,
   remotePage: 1,
+  remoteLanguage: null,
   busy: false,
   notice: "",
 };
 let controller;
+let editionController;
+const descriptions = new Map();
 let detailId = null;
 let toastTimer;
+let currentToast;
 let lastTrigger;
 let editingId = null;
 function hydrate() {
@@ -38,18 +64,20 @@ function hydrate() {
 }
 function save(next) {
   try {
-    localStorage.setItem(STORAGE, JSON.stringify(next));
-    saved = next;
+    const books = next.map((book) => ({
+      ...book,
+      status: normalizeReadingStatus(book.status),
+    }));
+    localStorage.setItem(STORAGE, JSON.stringify(books));
+    saved = books;
     return true;
   } catch {
-    toast(
-      "Le navigateur ne permet pas l’enregistrement. Votre liste n’a pas été modifiée.",
-    );
+    toast("storageFailed");
     return false;
   }
 }
-function isSaved(b) {
-  return saved.some(
+function findSaved(b) {
+  return saved.find(
     (s) =>
       s.id === b.id ||
       (s.isbn && b.isbn && s.isbn === b.isbn) ||
@@ -57,12 +85,77 @@ function isSaved(b) {
         normal(s.author) === normal(b.author)),
   );
 }
+function isSaved(book) {
+  return Boolean(findSaved(book));
+}
+function readingStatusControl(book) {
+  const status = normalizeReadingStatus(book.status);
+  return `<label class="reading-status status-${status}"><span>${t("readingStatus")}</span><select data-reading-status="${esc(book.id)}" aria-label="${esc(t("bookStatus", { title: bookName(book) }))}">${Object.entries(
+    READING_STATUSES,
+  )
+    .map(
+      ([value, label]) =>
+        `<option value="${value}" ${value === status ? "selected" : ""}>${t(`status.${value}`)}</option>`,
+    )
+    .join("")}</select></label>`;
+}
+function renderReadingFilters() {
+  const element = $("#reading-filters");
+  element.hidden = state.page !== "wishlist";
+  if (element.hidden) return;
+  const options = [
+    ["all", t("allStatuses")],
+    ...Object.entries(READING_STATUSES),
+  ];
+  element.innerHTML = options
+    .map(([status, label]) => {
+      const active = state.readingStatus === status;
+      const count =
+        status === "all"
+          ? saved.length
+          : saved.filter((book) => book.status === status).length;
+      return `<button class="chip reading-filter ${active ? "active" : ""}" data-reading-filter="${status}" aria-pressed="${active}">${status === "all" ? label : t(`status.${status}`)} <span class="reading-count">${formatNumber(count)}</span></button>`;
+    })
+    .join("");
+}
+function changeReadingStatus(control) {
+  const id = control.dataset.readingStatus;
+  const status = control.value;
+  const book = saved.find((item) => item.id === id);
+  if (!book || !Object.hasOwn(READING_STATUSES, status)) return;
+  const inDialog = Boolean(control.closest("dialog"));
+  if (
+    !save(saved.map((item) => (item.id === id ? { ...item, status } : item)))
+  ) {
+    control.value = book.status;
+    return;
+  }
+  render();
+  if (detailId && $("#book-dialog").open) showDetail(detailId, false);
+  const container = inDialog ? $("#book-dialog") : $("#books");
+  const nextControl = [
+    ...container.querySelectorAll("[data-reading-status]"),
+  ].find((item) => item.dataset.readingStatus === id);
+  (nextControl || $('#reading-filters [aria-pressed="true"]'))?.focus();
+  toast("statusSaved", null, { status });
+}
 function find(id) {
-  return (
+  const book =
     saved.find((b) => b.id === id) ||
     state.remote?.find((b) => b.id === id) ||
-    catalogue.find((b) => b.id === id)
-  );
+    catalogue.find((b) => b.id === id);
+  return book ? localizeBook(book, getLanguage()) : undefined;
+}
+function bookName(book) {
+  return !book.title || ["Sans titre", "Untitled"].includes(book.title)
+    ? t("untitled")
+    : book.title;
+}
+function bookAuthor(book) {
+  return !book.author ||
+    ["Auteur non renseigné", "Unknown author"].includes(book.author)
+    ? t("unknownAuthor")
+    : book.author;
 }
 function cover(b) {
   const src = b.coverId
@@ -70,7 +163,9 @@ function cover(b) {
     : b.isbn
       ? `https://covers.openlibrary.org/b/isbn/${encodeURIComponent(b.isbn)}-M.jpg?default=false`
       : "";
-  return `<div class="cover-placeholder" ${src ? "hidden" : ""} style="--book-color:${/^#[0-9a-f]{6}$/i.test(b.color) ? b.color : "#557260"}"><small>${esc(b.author)}</small><span>${esc(b.title)}</span><span class="ornament">✳</span></div>${src ? `<img class="book-cover" src="${src}" alt="Couverture de ${esc(b.title)}" loading="lazy">` : ""}`;
+  return `<div class="cover-placeholder" ${src ? "hidden" : ""} style="--book-color:${/^#[0-9a-f]{6}$/i.test(b.color) ? b.color : "#557260"}">
+    <small>${esc(bookAuthor(b))}</small><span>${esc(bookName(b))}</span><span class="ornament">✳</span>
+  </div>${src ? `<img class="book-cover" src="${src}" alt="${esc(t("coverAlt", { title: bookName(b) }))}" loading="lazy">` : ""}`;
 }
 function bindImageFallback(root = document) {
   root.querySelectorAll("img.book-cover").forEach((img) => {
@@ -90,19 +185,50 @@ function bindImageFallback(root = document) {
 }
 function card(b, i) {
   const added = isSaved(b);
-  return `<article class="book-card"><button class="cover-button" data-detail="${esc(b.id)}" aria-label="Voir la fiche de ${esc(b.title)}"><div class="cover-stage" style="--stage:${palette[i % palette.length]}">${cover(b)}<span class="book-number" aria-hidden="true">${String(i + 1).padStart(2, "0")}</span><span class="cover-hint">Ouvrir la fiche ${icon("arrow")}</span></div></button><button class="icon-btn save-book ${added ? "saved" : ""}" data-save="${esc(b.id)}" aria-label="${added ? "Retirer" : "Ajouter"} ${esc(b.title)} ${added ? "de" : "à"} ma liste à lire" aria-pressed="${added}">${icon(added ? "check" : "plus")}</button><div class="book-info"><span class="book-category">${esc((b.tags || [])[0] || "À découvrir")}</span><button class="book-title" data-detail="${esc(b.id)}">${esc(b.title)}</button><p class="book-author">${esc(b.author)}</p><div class="book-meta"><span>${b.pages ? esc(b.pages) + " pages" : "Pages non renseignées"}</span>${b.year ? `<span>${esc(b.year)}</span>` : ""}</div></div></article>`;
+  return `<article class="book-card">
+    <button class="cover-button" data-detail="${esc(b.id)}" aria-label="${esc(t("viewBook", { title: bookName(b) }))}">
+      <div class="cover-stage" style="--stage:${palette[i % palette.length]}">${cover(b)}
+        <span class="book-number" aria-hidden="true">${String(i + 1).padStart(2, "0")}</span>
+        <span class="cover-hint">${t("openDetail")} ${icon("arrow")}</span>
+      </div>
+    </button>
+    <button class="icon-btn save-book ${added ? "saved" : ""}" data-save="${esc(b.id)}"
+      aria-label="${esc(t(added ? "removeBookLabel" : "addBookLabel", { title: bookName(b) }))}" aria-pressed="${added}">${icon(added ? "check" : "plus")}</button>
+    <div class="book-info">
+      <span class="book-category">${esc(genreLabel((b.tags || [])[0] || "À découvrir"))}</span>
+      <button class="book-title" data-detail="${esc(b.id)}">${esc(bookName(b))}</button>
+      <p class="book-author">${esc(bookAuthor(b))}</p>
+      <div class="book-meta"><span>${b.pages ? pageCount(b.pages) : t("pagesUnknown")}</span>${b.year ? `<span>${esc(b.year)}</span>` : ""}</div>
+      ${b.originalEdition ? `<span class="book-edition-note">${t(b.language ? "originalEdition" : "editionLanguageUnknown")}</span>` : ""}
+      ${state.page === "wishlist" ? readingStatusControl(b) : ""}
+    </div>
+  </article>`;
 }
 function sourceBooks() {
-  return state.page === "wishlist" ? saved : (state.remote ?? catalogue);
+  const language = getLanguage();
+  if (state.page === "wishlist")
+    return saved.map((book) => localizeBook(book, language));
+  return (
+    state.remote?.map((book) => localizeBook(book, language)) ??
+    getCatalogue(language)
+  );
 }
 function filtered() {
   let books = sourceBooks().filter((b) => {
     if (
       state.page === "wishlist" &&
+      state.readingStatus !== "all" &&
+      b.status !== state.readingStatus
+    )
+      return false;
+    if (
+      state.page === "wishlist" &&
       state.query &&
-      !normal([b.title, b.author, b.isbn, ...b.tags].join(" ")).includes(
-        normal(state.query),
-      )
+      !normal(
+        [b.title, b.author, b.isbn, ...b.tags, ...b.tags.map(genreLabel)].join(
+          " ",
+        ),
+      ).includes(normal(state.query))
     )
       return false;
     if (
@@ -117,9 +243,9 @@ function filtered() {
     return true;
   });
   if (state.sort === "title")
-    books.sort((a, b) => a.title.localeCompare(b.title, "fr"));
+    books.sort((a, b) => a.title.localeCompare(b.title, getLocale()));
   if (state.sort === "author")
-    books.sort((a, b) => a.author.localeCompare(b.author, "fr"));
+    books.sort((a, b) => a.author.localeCompare(b.author, getLocale()));
   if (state.sort === "pages")
     books.sort((a, b) => (a.pages || Infinity) - (b.pages || Infinity));
   if (state.sort === "year")
@@ -132,11 +258,9 @@ function render() {
   const wish = state.page === "wishlist";
   $(".collection").setAttribute(
     "aria-label",
-    wish ? "Ma liste à lire" : "Découvrir des livres",
+    wish ? t("library") : t("discoverBooks"),
   );
-  $("#search").placeholder = wish
-    ? "Rechercher dans ma liste à lire…"
-    : "Un titre, un auteur, un ISBN…";
+  $("#search").placeholder = wish ? t("searchLibrary") : t("searchPlaceholder");
   $("#search-clear").hidden = !$("#search").value;
   $("#nav-count").textContent = saved.length;
   $$("[data-nav]").forEach((b) => {
@@ -147,34 +271,50 @@ function render() {
     );
   });
   $('#sort option[value="default"]').textContent = wish
-    ? "Derniers ajouts"
+    ? t("recentlyAdded")
     : state.remote
-      ? "Pertinence"
-      : "Notre sélection";
+      ? t("relevance")
+      : t("ourSelection");
   $$("[data-genre]").forEach((b) =>
     b.classList.toggle("active", b.dataset.genre === state.genre),
   );
   const fixed = ["Tous", "Roman", "Imaginaire", "Essai", "Classique"];
   const extra = [...new Set(sourceBooks().flatMap((b) => b.tags || []))]
     .filter((t) => !fixed.includes(t))
-    .sort((a, b) => a.localeCompare(b, "fr"));
+    .sort((a, b) => genreLabel(a).localeCompare(genreLabel(b), getLocale()));
   $("#extra-genre").innerHTML =
-    '<option value="">Autres genres</option>' +
-    extra.map((t) => `<option value="${esc(t)}">${esc(t)}</option>`).join("");
+    `<option value="">${t("otherGenres")}</option>` +
+    extra
+      .map((t) => `<option value="${esc(t)}">${esc(genreLabel(t))}</option>`)
+      .join("");
   $("#extra-genre").value = fixed.includes(state.genre) ? "" : state.genre;
+  renderReadingFilters();
   const books = filtered();
+  const booksLabel = bookCount(books.length);
   $("#result-count").textContent = state.busy
-    ? "Recherche en cours…"
-    : `${books.length} livre${books.length > 1 ? "s" : ""}${wish ? " dans votre liste" : state.remote ? " affiché" + (books.length > 1 ? "s" : "") + " sur " + state.remoteTotal.toLocaleString("fr-FR") : " à découvrir"}`;
+    ? t("searching")
+    : wish
+      ? t("inLibrary", { books: booksLabel })
+      : state.remote
+        ? t(pluralKey("remoteCount", books.length), {
+            books: booksLabel,
+            total: formatNumber(state.remoteTotal),
+          })
+        : t("discoverCount", { books: booksLabel });
   $("#search-notice").hidden = !state.notice;
-  $("#search-notice").textContent = state.notice;
+  $("#search-notice").textContent = state.notice ? t(state.notice) : "";
   $("#books").className = "book-grid" + (state.view === "list" ? " list" : "");
   $("#books").classList.toggle("loading", state.busy);
+  const emptyLibrary = wish && !saved.length;
   $("#books").innerHTML = books.length
     ? books.map(card).join("")
     : state.busy
-      ? `<div class="empty"><span class="busy-spinner"></span><h3>À la recherche de votre prochain livre…</h3></div>`
-      : `<div class="empty">${icon(wish && !saved.length ? "bookmark" : "search")}<h3>${wish && !saved.length ? "Votre prochaine histoire commence ici." : "Aucun livre pour le moment."}</h3><p>${wish && !saved.length ? "Un titre vous fait de l’œil ? Ajoutez-le depuis Découvrir, ou créez sa fiche manuellement." : "Essayez un autre titre ou élargissez vos filtres pour trouver votre bonheur."}</p><button class="primary" id="empty-action">${wish && !saved.length ? "Découvrir des livres" : "Réinitialiser les filtres"} ${icon("arrow")}</button></div>`;
+      ? `<div class="empty"><span class="busy-spinner"></span><h3>${t("findingNext")}</h3></div>`
+      : `<div class="empty">${icon(emptyLibrary ? "library" : "search")}
+        <h3>${t(emptyLibrary ? "emptyLibraryTitle" : "emptyResultsTitle")}</h3>
+        <p>${t(emptyLibrary ? "emptyLibraryText" : "emptyResultsText")}</p>
+        <button class="primary" id="empty-action">${t(emptyLibrary ? "discoverBooks" : "resetFilters")} ${icon("arrow")}</button>
+      </div>`;
   $("#load-more").hidden =
     wish ||
     !state.remote ||
@@ -192,6 +332,7 @@ function navigate(page) {
     genre: "Tous",
     query: "",
     pages: "all",
+    readingStatus: "all",
     sort: "default",
     remote: null,
     remoteTotal: 0,
@@ -204,38 +345,42 @@ function navigate(page) {
   location.hash = page;
   render();
 }
-function toast(message, undo) {
-  clearTimeout(toastTimer);
-  const el = $("#toast");
-  el.replaceChildren(document.createTextNode(message));
+function renderToast() {
+  if (!currentToast) return;
+  const { key, undo, values } = currentToast;
+  const params =
+    key === "statusSaved"
+      ? { ...values, status: t(`status.${values.status}`) }
+      : values;
+  const element = $("#toast");
+  element.replaceChildren(document.createTextNode(t(key, params)));
   if (undo) {
-    const btn = document.createElement("button");
-    btn.textContent = "Annuler";
-    btn.onclick = () => {
+    const button = document.createElement("button");
+    button.textContent = t("undo");
+    button.onclick = () => {
       undo();
-      el.classList.remove("visible");
+      element.classList.remove("visible");
     };
-    el.append(btn);
+    element.append(button);
   }
-  el.classList.add("visible");
+}
+function toast(key, undo, values = {}) {
+  clearTimeout(toastTimer);
+  currentToast = { key, undo, values };
+  renderToast();
+  $("#toast").classList.add("visible");
   toastTimer = setTimeout(
-    () => el.classList.remove("visible"),
+    () => $("#toast").classList.remove("visible"),
     undo ? 8000 : 4200,
   );
 }
 function toggleSave(id) {
   const b = find(id);
   if (!b) return;
-  const existing = saved.find(
-    (s) =>
-      s.id === id ||
-      (s.isbn && s.isbn === b.isbn) ||
-      (normal(s.title) === normal(b.title) &&
-        normal(s.author) === normal(b.author)),
-  );
+  const existing = findSaved(b);
   if (existing) {
     if (!save(saved.filter((s) => s.id !== existing.id))) return;
-    toast("Livre retiré de votre liste.", () => {
+    toast("bookRemoved", () => {
       if (!isSaved(existing) && save([...saved, existing])) {
         render();
         if (detailId) showDetail(detailId, false);
@@ -243,7 +388,7 @@ function toggleSave(id) {
     });
   } else {
     if (!save([...saved, { ...b, addedAt: Date.now() }])) return;
-    toast("Une nouvelle envie dans votre liste !");
+    toast("bookAdded");
   }
   render();
   if (detailId === id && $("#book-dialog").open) {
@@ -261,6 +406,8 @@ function openDialog(id) {
   $(id).showModal();
 }
 function sourceUrl(b) {
+  if (/^\/books\/OL\d+M$/.test(b.editionKey))
+    return `https://openlibrary.org${b.editionKey}`;
   if (b.workKey && /^\/?works\/OL\d+W$/.test(b.workKey))
     return `https://openlibrary.org/${b.workKey.replace(/^\//, "")}`;
   return b.isbn
@@ -273,29 +420,65 @@ function showDetail(id, open = true) {
   detailId = id;
   const added = isSaved(b);
   const url = sourceUrl(b);
-  $("#book-detail").innerHTML =
-    `<div class="detail-layout"><div class="detail-cover">${cover(b)}</div><div class="detail-content"><div class="eyebrow">${b.manual ? "VOTRE FICHE PERSONNELLE" : "UNE HISTOIRE À DÉCOUVRIR"}</div><h2 id="detail-title">${esc(b.title)}</h2><p class="detail-author">${esc(b.author)}</p><div class="detail-tags">${(b.tags || []).map((t) => `<span class="chip">${esc(t)}</span>`).join("")}</div><dl class="detail-facts"><div><dt>Nombre de pages</dt><dd>${b.pages ? esc(b.pages) + " pages" : "Non renseigné"}</dd></div><div><dt>Première parution</dt><dd>${b.year ? esc(b.year) : "Non renseignée"}</dd></div><div><dt>ISBN</dt><dd>${esc(b.isbn || "Non renseigné")}</dd></div><div><dt>Éditeur</dt><dd>${esc(b.publisher || "Non renseigné")}</dd></div></dl><h3>À propos du livre</h3><p class="description" id="detail-description">${esc(b.description || "Aucun résumé disponible pour ce livre.")}</p>${added ? `<label class="personal-label">Mes tags · séparés par des virgules<input class="personal-tags" id="personal-tags" value="${esc(b.tags.join(", "))}" maxlength="250" placeholder="Roman, Nature…"></label><button class="text-btn" id="save-tags">Enregistrer les tags</button>` : ""}<div class="detail-actions"><button class="primary" data-save="${esc(b.id)}">${icon(added ? "check" : "plus")}${added ? "Retirer de ma liste" : "Ajouter à ma liste à lire"}</button>${b.manual ? `<button class="secondary" id="edit-manual">Modifier</button>` : ""}</div>${url ? `<a class="detail-source" href="${esc(url)}" target="_blank" rel="noopener noreferrer">Voir la référence sur Open Library ↗</a>` : '<span class="detail-source">Métadonnées ajoutées manuellement.</span>'}${b.manual ? "" : '<span class="detail-source">Le nombre de pages peut varier selon l’édition.</span>'}</div></div>`;
+  $("#book-detail").innerHTML = `<div class="detail-layout">
+    <div class="detail-cover">${cover(b)}</div>
+    <div class="detail-content">
+      <div class="eyebrow">${t(b.manual ? "personalBook" : "discoverStory")}</div>
+      <h2 id="detail-title">${esc(bookName(b))}</h2><p class="detail-author">${esc(bookAuthor(b))}</p>
+      ${b.originalEdition ? `<span class="detail-source">${t(b.language ? "originalEdition" : "editionLanguageUnknown")}</span>` : ""}
+      <div class="detail-tags">${(b.tags || []).map((tag) => `<span class="chip">${esc(genreLabel(tag))}</span>`).join("")}</div>
+      <dl class="detail-facts">
+        <div><dt>${t("pageNumber")}</dt><dd>${b.pages ? pageCount(b.pages) : t("notProvided")}</dd></div>
+        <div><dt>${t("firstPublication")}</dt><dd>${b.year ? esc(b.year) : t("yearUnknown")}</dd></div>
+        <div><dt>ISBN</dt><dd>${esc(b.isbn || t("notProvided"))}</dd></div>
+        <div><dt>${t("publisher")}</dt><dd>${esc(b.publisher || t("notProvided"))}</dd></div>
+      </dl>
+      <h3>${t("aboutBook")}</h3><p class="description" id="detail-description">${esc(b.description || t("noSummary"))}</p>
+      ${
+        added
+          ? `${readingStatusControl(localizeBook(findSaved(b), getLanguage()))}
+        <label class="personal-label">${t("personalTags")}<input class="personal-tags" id="personal-tags" value="${esc(b.tags.join(", "))}" maxlength="250" placeholder="${t("personalTagsPlaceholder")}"></label>
+        <button class="text-btn" id="save-tags">${t("saveTags")}</button>`
+          : ""
+      }
+      <div class="detail-actions">
+        <button class="primary" data-save="${esc(b.id)}">${icon(added ? "check" : "plus")}${t(added ? "removeFromLibrary" : "addToLibrary")}</button>
+        ${b.manual ? `<button class="secondary" id="edit-manual">${t("edit")}</button>` : ""}
+      </div>
+      ${url ? `<a class="detail-source" href="${esc(url)}" target="_blank" rel="noopener noreferrer">${t("openLibraryReference")}</a>` : `<span class="detail-source">${t("manualMetadata")}</span>`}
+      ${b.manual ? "" : `<span class="detail-source">${t("editionPagesVary")}</span>`}
+    </div>
+  </div>`;
   bindImageFallback($("#book-dialog"));
   if (open) openDialog("#book-dialog");
-  if (b.workKey && !b.description) loadDescription(b);
+  if (b.editionKey && !b.description) loadDescription(b);
 }
 async function loadDescription(b) {
+  const language = getLanguage();
+  const key = b.editionKey;
+  if (!/^\/books\/OL\d+M$/.test(key)) return;
   try {
-    if (!/^\/?works\/OL\d+W$/.test(b.workKey)) return;
-    const response = await fetch(
-      `https://openlibrary.org/${b.workKey.replace(/^\//, "")}.json`,
-      { signal: AbortSignal.timeout(9000) },
-    );
-    if (!response.ok) return;
-    const data = await response.json();
-    const text =
-      typeof data.description === "string"
-        ? data.description
-        : data.description?.value;
-    if (text) {
-      b.description = text;
-      if (detailId === b.id && $("#book-dialog").open)
-        $("#detail-description").textContent = text;
+    if (!descriptions.has(key)) {
+      const response = await fetch(`https://openlibrary.org${key}.json`, {
+        signal: AbortSignal.timeout(9000),
+      });
+      if (!response.ok) return;
+      const data = await response.json();
+      const description =
+        typeof data.description === "string"
+          ? data.description
+          : data.description?.value;
+      descriptions.set(key, typeof description === "string" ? description : "");
+    }
+    const text = descriptions.get(key);
+    if (
+      text &&
+      getLanguage() === language &&
+      detailId === b.id &&
+      $("#book-dialog").open &&
+      find(b.id)?.editionKey === key
+    ) {
+      $("#detail-description").textContent = text;
     }
   } catch {}
 }
@@ -321,6 +504,7 @@ async function search(more = false) {
   controller = new AbortController();
   const currentController = controller;
   state.query = q;
+  state.remoteLanguage = getLanguage();
   state.busy = true;
   state.notice = "";
   if (!more) {
@@ -335,31 +519,36 @@ async function search(more = false) {
       q,
       state.remotePage,
       currentController.signal,
+      getLanguage(),
     );
     if (controller !== currentController) return;
-    const books = data.docs.map(parseBook);
+    const books = data.docs.map((document) =>
+      parseBook(document, state.remoteLanguage),
+    );
     state.remote = more
       ? [...new Map([...state.remote, ...books].map((b) => [b.id, b])).values()]
       : books;
     state.remoteTotal = data.numFound ?? data.num_found ?? books.length;
-    if (!books.length && !more)
-      state.notice =
-        "Aucun résultat dans Open Library. Essayez un titre dans sa langue originale, un auteur ou un ISBN.";
+    if (!books.length && !more) state.notice = "noResults";
   } catch (error) {
     if (controller !== currentController) return;
     if (more) {
       state.remotePage--;
-      state.notice =
-        "Les résultats suivants ne sont pas disponibles pour le moment. Vous pouvez réessayer.";
+      state.notice = "nextResultsUnavailable";
     } else {
-      state.remote = catalogue.filter((b) =>
-        normal([b.title, b.author, b.isbn, ...b.tags].join(" ")).includes(
-          normal(q),
-        ),
+      state.remote = getCatalogue(getLanguage()).filter((b) =>
+        normal(
+          [
+            b.title,
+            b.author,
+            b.isbn,
+            ...b.tags,
+            ...b.tags.map(genreLabel),
+          ].join(" "),
+        ).includes(normal(q)),
       );
       state.remoteTotal = state.remote.length;
-      state.notice =
-        "Open Library est indisponible ou trop lent. Seule notre sélection locale est affichée. Vous pouvez réessayer ou ajouter une fiche manuellement.";
+      state.notice = "searchUnavailable";
     }
   } finally {
     clearTimeout(timer);
@@ -370,6 +559,7 @@ async function search(more = false) {
   }
 }
 function resetFilters() {
+  state.readingStatus = "all";
   state.genre = "Tous";
   state.pages = "all";
   $("#pages-filter").value = "all";
@@ -383,19 +573,77 @@ function resetFilters() {
   }
   render();
 }
+function updateManualLabels() {
+  $("#manual-title").textContent = t(editingId ? "editBook" : "addBook");
+  $('#manual-form button[type="submit"]').innerHTML =
+    icon(editingId ? "check" : "plus") +
+    t(editingId ? "saveChanges" : "addToLibrary");
+}
+function refreshOpenDetail() {
+  if (detailId && $("#book-dialog").open) {
+    const tags = $("#personal-tags")?.value;
+    showDetail(detailId, false);
+    if (tags !== undefined && $("#personal-tags"))
+      $("#personal-tags").value = tags;
+  }
+}
+async function refreshSavedEditions() {
+  editionController?.abort();
+  const current = new AbortController();
+  editionController = current;
+  const language = getLanguage();
+  const timeout = setTimeout(() => current.abort(), 12000);
+  try {
+    const changed = await loadBookEditions(saved, language, current.signal);
+    if (
+      changed &&
+      editionController === current &&
+      getLanguage() === language
+    ) {
+      render();
+      refreshOpenDetail();
+    }
+  } catch {
+    // Retain the saved edition when the service has no matching edition or is unavailable.
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+function refreshLanguage() {
+  applyTranslations();
+  $("#language-select").value = getLanguage();
+  render();
+  updateManualLabels();
+  refreshOpenDetail();
+  if ($("#toast").classList.contains("visible")) renderToast();
+  refreshSavedEditions();
+  if (
+    state.page === "discover" &&
+    state.remote !== null &&
+    state.query &&
+    state.remoteLanguage !== getLanguage()
+  )
+    search();
+}
+$("#language-select").addEventListener("change", (event) => {
+  if (!setLanguage(event.target.value)) return;
+  refreshLanguage();
+  try {
+    localStorage.setItem(LANGUAGE_STORAGE, getLanguage());
+  } catch {
+    toast("languageNotSaved");
+  }
+});
 function manualOpen(b) {
   editingId = b?.id || null;
   const form = $("#manual-form");
   form.reset();
-  $("#manual-title").textContent = b ? "Modifier le livre" : "Ajouter un livre";
   if (b) {
     for (const k of ["title", "author", "pages", "year", "description"])
       form.elements[k].value = b[k] || "";
     form.elements.tags.value = b.tags.join(", ");
   }
-  $("#manual-form button[type=submit]").innerHTML =
-    icon(b ? "check" : "plus") +
-    (b ? "Enregistrer les modifications" : "Ajouter à ma liste à lire");
+  updateManualLabels();
   openDialog("#manual-dialog");
 }
 document.addEventListener("click", (e) => {
@@ -403,6 +651,14 @@ document.addEventListener("click", (e) => {
   const saveButton = e.target.closest("[data-save]");
   const nav = e.target.closest("[data-nav]");
   const genre = e.target.closest("[data-genre]");
+  const readingFilter = e.target.closest("[data-reading-filter]");
+  if (readingFilter) {
+    state.readingStatus = readingFilter.dataset.readingFilter;
+    render();
+    $(
+      `#reading-filters [data-reading-filter="${state.readingStatus}"]`,
+    ).focus();
+  }
   if (detail) showDetail(detail.dataset.detail);
   if (saveButton) toggleSave(saveButton.dataset.save);
   if (nav) navigate(nav.dataset.nav);
@@ -428,7 +684,7 @@ document.addEventListener("click", (e) => {
     if (save(saved.map((b) => (b.id === detailId ? { ...b, tags } : b)))) {
       render();
       showDetail(detailId, false);
-      toast("Vos tags ont été enregistrés.");
+      toast("tagsSaved");
     }
   }
   if (e.target.closest("#edit-manual")) {
@@ -454,6 +710,10 @@ $$("dialog").forEach((d) => {
     if (d.id === "book-dialog") detailId = null;
     if (lastTrigger?.isConnected) lastTrigger.focus();
   });
+});
+document.addEventListener("change", (event) => {
+  if (event.target.matches("[data-reading-status]"))
+    changeReadingStatus(event.target);
 });
 $("#search-form").addEventListener("submit", (e) => {
   e.preventDefault();
@@ -513,7 +773,7 @@ $("#manual-form").onsubmit = (e) => {
   const title = data.get("title").trim(),
     author = data.get("author").trim();
   if (!title || !author) {
-    toast("Veuillez renseigner le titre et l’auteur.");
+    toast("titleAuthorRequired");
     return;
   }
   const old = editingId ? saved.find((b) => b.id === editingId) : null;
@@ -539,7 +799,7 @@ $("#manual-form").onsubmit = (e) => {
     color: "#557260",
   };
   if (!editingId && isSaved(book)) {
-    toast("Ce livre est déjà dans votre liste.");
+    toast("alreadySaved");
     return;
   }
   if (
@@ -551,11 +811,7 @@ $("#manual-form").onsubmit = (e) => {
   ) {
     $("#manual-dialog").close();
     navigate("wishlist");
-    toast(
-      editingId
-        ? "La fiche a été mise à jour."
-        : "Votre livre a rejoint la liste à lire.",
-    );
+    toast(editingId ? "bookUpdated" : "manualBookAdded");
   }
 };
 $("#export").onclick = () => {
@@ -569,19 +825,31 @@ $("#export").onclick = () => {
   setTimeout(() => URL.revokeObjectURL(link.href), 1000);
 };
 window.addEventListener("hashchange", () => {
-  const page = location.hash === "#wishlist" ? "wishlist" : "discover";
+  const page = location.hash === "#discover" ? "discover" : "wishlist";
   if (page !== state.page) navigate(page);
 });
 window.addEventListener("storage", (e) => {
-  if (e.key !== STORAGE) return;
+  if (e.key === LANGUAGE_STORAGE) {
+    initializeLanguage();
+    refreshLanguage();
+    return;
+  }
+  if (e.key !== STORAGE && e.key !== null) return;
   try {
     saved = parseWishlist(e.newValue);
-    render();
+    if (e.key === null) {
+      initializeLanguage();
+      refreshLanguage();
+    } else {
+      render();
+      refreshSavedEditions();
+    }
+    if (detailId && $("#book-dialog").open) {
+      if (find(detailId)) showDetail(detailId, false);
+      else $("#book-dialog").close();
+    }
   } catch {}
 });
 hydrate();
-render();
-if (!storageOK)
-  toast(
-    "Les données enregistrées ne sont pas accessibles. Vous pouvez exporter votre liste depuis les informations.",
-  );
+refreshLanguage();
+if (!storageOK) toast("storageUnreadable");

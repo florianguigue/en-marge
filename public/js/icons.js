@@ -1,5 +1,7 @@
 export const icons = {
   compass: '<circle cx="12" cy="12" r="9"/><path d="m16 8-2 6-6 2 2-6Z"/>',
+  library:
+    '<rect x="3" y="4" width="4" height="16" rx="1"/><rect x="9" y="4" width="4" height="16" rx="1"/><path d="m15 5 4-1 4 15-4 1Z"/>',
   bookmark: '<path d="M6 4h12v17l-6-4-6 4Z"/>',
   arrow: '<path d="M4 12h16m-6-6 6 6-6 6"/>',
   search: '<circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/>',

@@ -12,7 +12,7 @@ test("loads existing lists while discarding malformed entries and tags", () => {
   };
   expect(STORAGE).toBe("en-marge-wishlist-v1");
   expect(parseWishlist(JSON.stringify([null, {}, book]))).toEqual([
-    { ...book, tags: ["Roman"] },
+    { ...book, tags: ["Roman"], status: "to-read" },
   ]);
   expect(parseWishlist(null)).toEqual([]);
   expect(
@@ -36,4 +36,24 @@ test("accepts incomplete Open Library metadata", () => {
   expect(book.isbn).toBe("9781234567890");
   expect(book.author).toBe("Auteur non renseigné");
   expect(book.pages).toBeNull();
+});
+
+test("preserves valid reading statuses and migrates missing or invalid ones", () => {
+  const book = {
+    id: "manual:1",
+    title: "Livre",
+    author: "Autrice",
+    tags: ["Fantasy"],
+  };
+  for (const status of ["to-read", "reading", "read", "abandoned"]) {
+    expect(parseWishlist(JSON.stringify([{ ...book, status }]))[0]).toEqual({
+      ...book,
+      status,
+    });
+  }
+  for (const status of [undefined, null, "unknown", "toString", 2]) {
+    expect(parseWishlist(JSON.stringify([{ ...book, status }]))[0].status).toBe(
+      "to-read",
+    );
+  }
 });
