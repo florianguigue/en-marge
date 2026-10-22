@@ -6,7 +6,8 @@ L’interface existante est conservée, sur ordinateur et mobile.
 
 L’application est écrite en JavaScript natif : modules ES côté navigateur et serveur
 HTTP Bun et base SQLite intégrée via `bun:sqlite`. Aucun framework, TypeScript,
-service de base de données externe ou dépendance de production. Aucune compilation n’est nécessaire.
+service de base de données externe. Le serveur MCP utilise le SDK officiel et Zod.
+Aucune compilation n’est nécessaire.
 
 ## Démarrer avec Bun
 
@@ -27,8 +28,7 @@ Pour un lancement simple, sans surveillance :
 bun run start
 ```
 
-Le serveur n’a besoin d’aucune installation de dépendance pour démarrer ;
-`bun install` fournit seulement les outils de développement et de test.
+`bun install` installe les dépendances du serveur MCP et les outils de développement.
 
 Le port par défaut est `4173`, l’adresse d’écoute locale `127.0.0.1`.
 Pour les modifier :
@@ -111,6 +111,7 @@ public/
     utils.js            Échappement HTML et normalisation du texte
 src/server.js           Serveur HTTP Bun et API
 src/database.js         Base SQLite et transactions
+src/mcp.js              Serveur MCP local (stdio)
 tests/unit/             Tests Bun
 tests/browser/          Tests Playwright
 Dockerfile
@@ -167,6 +168,131 @@ statut permettent de retrouver chaque groupe de livres.
 Les listes existantes sont conservées : un livre sans statut est considéré comme
 **À lire**. Les statuts sont enregistrés avec les livres dans la base du serveur et
 inclus dans l’export JSON (`to-read`, `reading`, `read`, `abandoned`).
+
+## Hébergement et connexion depuis ChatGPT
+
+Le serveur web expose aussi les outils MCP sur `/mcp` via **Streamable HTTP**.
+L’interface, l’API et le MCP utilisent la même bibliothèque SQLite. L’accès est
+public, sans authentification : chaque visiteur et client MCP peut ajouter ou
+supprimer des livres.
+
+La configuration de production vise `en-marge.home.florianguigue.fr` avec Docker
+Compose et Caddy pour HTTPS. Sur un serveur disposant de Docker et du dépôt :
+
+1. Faire pointer le DNS `A` de `en-marge.home.florianguigue.fr` vers l’IPv4 du serveur.
+   Ajouter un `AAAA` uniquement si le serveur est effectivement accessible en IPv6.
+2. Rendre les ports TCP 80 et 443 accessibles depuis Internet. Ils doivent être
+   disponibles pour Caddy ; le port 4173 reste interne à Docker.
+3. Depuis le dossier du projet, lancer :
+
+   ```sh
+   docker compose -f compose.production.yaml up --build -d --wait
+   docker compose -f compose.production.yaml logs -f
+   ```
+
+Caddy obtient et renouvelle le certificat TLS. Les livres restent dans le volume
+`en-marge-data`, les certificats dans `caddy-data`. Cette configuration suppose
+que le serveur n’héberge pas déjà un autre reverse proxy sur ces ports. Dans ce
+cas, utiliser le proxy existant pour transmettre le domaine vers le port 4173,
+avec `PUBLIC_URL=https://en-marge.home.florianguigue.fr` côté application.
+
+Adresses une fois le déploiement effectué :
+
+- Application : <https://en-marge.home.florianguigue.fr>
+- Santé : <https://en-marge.home.florianguigue.fr/healthz>
+- MCP : <https://en-marge.home.florianguigue.fr/mcp>
+
+`PUBLIC_URL` est l’origine HTTPS publique, sans chemin. Elle permet aux écritures
+du navigateur de fonctionner derrière le proxy HTTPS, sans faire confiance aux
+en-têtes `X-Forwarded-*` fournis par les clients. Les requêtes MCP ayant un Host
+ou une origine non autorisés sont refusées. Les appels serveur à serveur n’ont
+pas besoin d’en-tête Origin. Le MCP est sans session et accepte les clients de
+la génération 2025 ; les opérations GET/DELETE de gestion de session renvoient 405. Un GET dans un navigateur ne permet donc pas de vérifier les outils MCP.
+
+Pour contrôler le MCP après déploiement :
+
+```sh
+curl https://en-marge.home.florianguigue.fr/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}'
+```
+
+Dans ChatGPT sur le web, ouvrir les plugins, puis **Ajouter un serveur MCP
+personnalisé** (selon les permissions de votre compte ou espace). Donner le nom
+« En marge », saisir `https://en-marge.home.florianguigue.fr/mcp` et choisir
+**Sans authentification**. Créer puis installer le plugin, et le sélectionner
+avec `@` dans une conversation. Les outils `list_books`, `add_book` et
+`delete_book` seront disponibles, avec les confirmations d’écriture prévues par
+ChatGPT. Aucune clé API OpenAI n’est nécessaire dans cette application.
+
+Références : [connexion MCP dans ChatGPT](https://developers.openai.com/api/docs/guides/custom-mcp-server)
+et [HTTPS automatique Caddy](https://caddyserver.com/docs/automatic-https).
+
+## Outils MCP et accès local
+
+Le serveur expose trois outils aux clients MCP :
+
+| Outil         | Paramètres                                                                                    | Résultat                                  |
+| ------------- | --------------------------------------------------------------------------------------------- | ----------------------------------------- |
+| `list_books`  | Aucun                                                                                         | Livres, identifiants et révision courante |
+| `add_book`    | `title`, `author` obligatoires ; `status`, `tags`, `description`, `year`, `pages` facultatifs | Livre créé avec son identifiant           |
+| `delete_book` | `id`, obtenu avec `list_books`                                                                | Livre supprimé                            |
+
+Les statuts acceptés sont `to-read` (défaut), `reading`, `read`, `abandoned`.
+Les ajouts créent des fiches manuelles, avec un identifiant unique ; deux appels
+identiques créent deux livres. La suppression est définitive et porte uniquement
+sur l’identifiant demandé. Un identifiant absent renvoie une erreur sans modifier
+la bibliothèque. Le SDK valide les paramètres avant toute écriture.
+
+Après `bun install --frozen-lockfile`, lancer :
+
+```sh
+bun run mcp
+```
+
+Ce processus utilise le transport local **stdio** : il attend les messages MCP
+sur l’entrée standard. Le client MCP doit le lancer et garder cette entrée ouverte.
+La sortie standard est réservée au protocole ; les erreurs vont sur stderr.
+Ce mode local est indépendant du point d’accès HTTP `/mcp` du serveur web.
+
+Exemple de configuration pour un client acceptant une section `mcpServers`
+(adapter les chemins absolus à votre installation) :
+
+```json
+{
+  "mcpServers": {
+    "en-marge": {
+      "command": "/chemin/absolu/vers/bun",
+      "args": ["/chemin/absolu/vers/en-marge/src/mcp.js"],
+      "env": {
+        "DATABASE_PATH": "/chemin/absolu/vers/en-marge/data/en-marge.sqlite"
+      }
+    }
+  }
+}
+```
+
+Sans `DATABASE_PATH`, le serveur MCP utilise `data/en-marge.sqlite` dans le
+projet, quel que soit le dossier de lancement du client. Si le serveur web utilise
+une autre base, indiquer son chemin absolu dans cette configuration. Les deux
+processus peuvent fonctionner simultanément : les écritures MCP sont atomiques,
+incrémentent la révision et apparaissent dans l’interface lors de son actualisation
+automatique. Le serveur web n’a pas besoin de tourner pour utiliser le MCP.
+
+Pour accéder à la bibliothèque du volume Docker existant, démarrer Compose et
+configurer le client pour lancer la commande suivante, sans pseudo-terminal :
+
+```sh
+docker compose -f /chemin/absolu/vers/en-marge/compose.yaml exec -T en-marge bun src/mcp.js
+```
+
+Exemples de demandes au client connecté : « Liste les livres de ma bibliothèque »,
+« Ajoute Dune de Frank Herbert », « Supprime le livre dont l’identifiant est … ».
+Les tests MCP couvrent l’initialisation, la découverte des outils, la validation,
+la persistance, le partage SQLite et les révisions après ajout ou suppression.
+
+Référence : [SDK MCP officiel et transport stdio](https://ts.sdk.modelcontextprotocol.io/v2/).
 
 ## Données
 

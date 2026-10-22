@@ -30,6 +30,21 @@ export function openStore(
   );
   return {
     read,
+    add: db.transaction((book) => {
+      const current = read();
+      const books = validateBooks([...current.books, book]);
+      write.run(JSON.stringify(books));
+      return books.at(-1);
+    }).immediate,
+    remove: db.transaction((id) => {
+      const current = read();
+      const book = current.books.find((entry) => entry.id === id);
+      if (!book) throw new Error("Livre introuvable.");
+      write.run(
+        JSON.stringify(current.books.filter((entry) => entry.id !== id)),
+      );
+      return book;
+    }).immediate,
     replace: db.transaction((books, revision) => {
       const current = read();
       if (current.revision !== revision) return null;
