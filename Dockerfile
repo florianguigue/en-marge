@@ -6,8 +6,8 @@ ENV NODE_ENV=production \
     PORT=4173 \
     DATABASE_PATH=/app/data/en-marge.sqlite
 
-# Bun and browser modules need no production dependencies or compilation.
-COPY --chown=bun:bun package.json ./
+COPY --chown=bun:bun package.json bun.lock ./
+RUN bun install --frozen-lockfile --production
 COPY --chown=bun:bun src ./src
 COPY --chown=bun:bun public ./public
 

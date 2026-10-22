@@ -1,5 +1,10 @@
 import { fileURLToPath } from "node:url";
+import {
+  createMcpHandler,
+  hostHeaderValidationResponse,
+} from "@modelcontextprotocol/server";
 import { openStore, validateBooks } from "./database.js";
+import { createLibraryMcpServer } from "./mcp.js";
 
 const publicDirectory = fileURLToPath(new URL("../public/", import.meta.url));
 const files = new Map(
@@ -22,8 +27,26 @@ export function startServer({
   port = parsePort(process.env.PORT),
   hostname = process.env.HOST || "127.0.0.1",
   databasePath = process.env.DATABASE_PATH || "./data/en-marge.sqlite",
+  publicUrl = process.env.PUBLIC_URL,
 } = {}) {
+  const publicOrigin = publicUrl ? new URL(publicUrl).origin : null;
+  if (
+    publicUrl &&
+    (!publicUrl.startsWith("https://") ||
+      new URL(publicUrl).pathname !== "/" ||
+      new URL(publicUrl).search ||
+      new URL(publicUrl).hash ||
+      new URL(publicUrl).username ||
+      new URL(publicUrl).password)
+  ) {
+    throw new Error(
+      "PUBLIC_URL doit être une origine HTTPS, sans chemin ni identifiants.",
+    );
+  }
   const store = openStore(databasePath);
+  const mcp = createMcpHandler(() => createLibraryMcpServer({ store }), {
+    maxRequestBodySize: 1024 * 1024,
+  });
   let server;
   try {
     server = Bun.serve({
@@ -37,6 +60,30 @@ export function startServer({
           "Cache-Control": "no-cache",
         });
         const { pathname } = new URL(request.url);
+        if (pathname === "/mcp") {
+          const rejected = hostHeaderValidationResponse(
+            request,
+            publicOrigin
+              ? [new URL(publicOrigin).hostname]
+              : ["localhost", "127.0.0.1", "[::1]"],
+          );
+          if (rejected) return rejected;
+          const origin = request.headers.get("Origin");
+          if (
+            (origin &&
+              origin !== (publicOrigin || new URL(request.url).origin)) ||
+            request.headers.get("Sec-Fetch-Site") === "cross-site"
+          ) {
+            return Response.json(
+              { error: "Origine non autorisée." },
+              { status: 403 },
+            );
+          }
+          const response = await mcp.fetch(request);
+          response.headers.set("Cache-Control", "no-store");
+          response.headers.set("X-Content-Type-Options", "nosniff");
+          return response;
+        }
         if (pathname.startsWith("/api/")) {
           headers.set("Cache-Control", "no-store");
           const json = (body, status = 200) =>
@@ -58,7 +105,8 @@ export function startServer({
               );
             const origin = request.headers.get("Origin");
             if (
-              (origin && origin !== new URL(request.url).origin) ||
+              (origin &&
+                origin !== (publicOrigin || new URL(request.url).origin)) ||
               request.headers.get("Sec-Fetch-Site") === "cross-site"
             )
               return json({ error: "Origine non autorisée." }, 403);
@@ -132,6 +180,7 @@ export function startServer({
   }
   const stop = server.stop.bind(server);
   server.stop = async (...args) => {
+    await mcp.close();
     await stop(...args);
     store.close();
   };

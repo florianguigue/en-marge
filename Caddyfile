@@ -1,0 +1,5 @@
+en-marge.home.florianguigue.fr {
+	reverse_proxy en-marge:4173 {
+		flush_interval -1
+	}
+}
