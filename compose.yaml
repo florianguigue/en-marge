@@ -6,6 +6,9 @@ services:
     environment:
       HOST: 0.0.0.0
       PORT: "4173"
+      DATABASE_PATH: /app/data/en-marge.sqlite
+    volumes:
+      - en-marge-data:/app/data
     init: true
     restart: unless-stopped
     read_only: true
@@ -13,3 +16,6 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+
+volumes:
+  en-marge-data:

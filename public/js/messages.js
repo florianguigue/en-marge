@@ -14,7 +14,7 @@ export const messages = {
     discover: "Découvrir",
     library: "Ma bibliothèque",
     personalSpace: "Votre espace personnel",
-    savedOnDevice: "Enregistré sur cet appareil",
+    savedOnDevice: "Enregistré sur le serveur",
     language: "Langue",
     discoverBooks: "Découvrir des livres",
     searchBook: "Rechercher un livre",
@@ -73,16 +73,19 @@ export const messages = {
     aboutEyebrow: "VOTRE ESPACE PERSONNEL",
     aboutTitle: "Vos envies restent ici.",
     aboutStorageText:
-      "Votre liste est enregistrée dans ce navigateur, sur cet appareil. Elle est retrouvée lors de votre prochaine visite, mais n’est pas synchronisée entre vos appareils. Effacer les données du navigateur efface aussi cette liste.",
+      "Votre bibliothèque est enregistrée dans une base de données sur le serveur. Elle est partagée entre les appareils qui accèdent à cette instance. Effacer les données du navigateur ne supprime pas les livres.",
     aboutMetadata:
       "Seules les métadonnées sont conservées : aucun livre numérique n’est hébergé. La recherche et les couvertures proviennent d’Open Library. Les données manquantes sont signalées.",
     export: "Exporter ma liste (JSON)",
     storageFailed:
-      "Le navigateur ne permet pas l’enregistrement. Votre liste n’a pas été modifiée.",
+      "Le serveur ne permet pas l’enregistrement. Votre liste n’a pas été modifiée. Réessayez.",
     storageUnreadable:
-      "Les données enregistrées ne sont pas accessibles. Vous pouvez exporter votre liste depuis les informations.",
-    languageNotSaved:
-      "La langue a été changée, mais le navigateur ne permet pas de mémoriser ce choix.",
+      "La bibliothèque du serveur est inaccessible. Vérifiez la connexion puis actualisez la page.",
+    storageConflict:
+      "La bibliothèque a changé depuis un autre appareil. Elle a été actualisée ; réessayez votre modification.",
+    migrationFailed:
+      "L’ancienne liste n’a pas pu être transférée. Elle reste dans ce navigateur ; actualisez pour réessayer.",
+    languageNotSaved: "Le serveur n’a pas pu enregistrer la langue. Réessayez.",
     readingStatus: "Statut de lecture",
     bookStatus: "Statut de {title}",
     "status.to-read": "À lire",
@@ -174,7 +177,7 @@ export const messages = {
     discover: "Discover",
     library: "My library",
     personalSpace: "Your personal space",
-    savedOnDevice: "Saved on this device",
+    savedOnDevice: "Saved on the server",
     language: "Language",
     discoverBooks: "Discover books",
     searchBook: "Search for a book",
@@ -233,16 +236,20 @@ export const messages = {
     aboutEyebrow: "YOUR PERSONAL SPACE",
     aboutTitle: "Your reading plans stay here.",
     aboutStorageText:
-      "Your library is saved in this browser, on this device. It will be here on your next visit, but is not synced between devices. Clearing browser data also removes your library.",
+      "Your library is saved in a database on the server and shared by devices accessing this instance. Clearing browser data does not delete your books.",
     aboutMetadata:
       "Only book metadata is saved; no ebooks are hosted. Search results and covers come from Open Library. Missing information is identified.",
     export: "Export my library (JSON)",
     storageFailed:
-      "The browser could not save your changes. Your library has not been changed.",
+      "The server could not save your changes. Your library has not been changed. Please try again.",
     storageUnreadable:
-      "Saved data is not accessible. You can export your library from the information panel.",
+      "The server library is unavailable. Check your connection and reload the page.",
+    storageConflict:
+      "The library changed on another device. It has been refreshed; please try your change again.",
+    migrationFailed:
+      "Your old library could not be transferred. It remains in this browser; reload to try again.",
     languageNotSaved:
-      "The language has changed, but the browser could not save your preference.",
+      "The server could not save your language preference. Please try again.",
     readingStatus: "Reading status",
     bookStatus: "Status of {title}",
     "status.to-read": "To read",

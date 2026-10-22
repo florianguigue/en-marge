@@ -5,8 +5,8 @@ fiches détaillées, ajout manuel, modification, statuts de lecture, tags, filtr
 L’interface existante est conservée, sur ordinateur et mobile.
 
 L’application est écrite en JavaScript natif : modules ES côté navigateur et serveur
-HTTP Bun. Aucun framework, TypeScript, service de base de données ou dépendance
-de production. Aucune compilation n’est nécessaire.
+HTTP Bun et base SQLite intégrée via `bun:sqlite`. Aucun framework, TypeScript,
+service de base de données externe ou dépendance de production. Aucune compilation n’est nécessaire.
 
 ## Démarrer avec Bun
 
@@ -62,14 +62,16 @@ docker compose down
 ```
 
 L’image utilise Bun 1.4.4, s’exécute avec l’utilisateur `bun` et inclut un contrôle
-de santé. Compose utilise un système de fichiers en lecture seule. Aucun volume
-n’est nécessaire : les listes restent dans les navigateurs des utilisateurs.
+de santé. Compose utilise un système de fichiers en lecture seule, avec un volume
+nommé `en-marge-data` accessible en écriture pour SQLite. La bibliothèque survit
+aux redémarrages et aux recréations des conteneurs. `docker compose down` conserve
+le volume ; `docker compose down -v` le supprime avec toutes les données.
 
 Le Dockerfile peut également être utilisé directement :
 
 ```sh
 docker build -t en-marge .
-docker run --rm -p 4173:4173 en-marge
+docker run --rm -p 4173:4173 -v en-marge-data:/app/data en-marge
 ```
 
 ## Développement et vérifications
@@ -84,6 +86,9 @@ bun run test:e2e      # parcours Chromium sur ordinateur et mobile
 Les tests navigateur couvrent les ajouts/retraits, la persistance après
 actualisation, l’annulation d’un retrait, les fiches manuelles, les tags, l’export,
 la recherche, la pagination, le repli local et l’annulation d’une recherche.
+Ils vérifient aussi le partage entre navigateurs indépendants, la reprise des
+anciennes listes et les pannes du serveur. Les tests Bun vérifient la persistance
+après redémarrage et la protection contre les écritures concurrentes.
 Les services externes sont simulés pour rendre ces tests indépendants du réseau.
 
 ## Organisation
@@ -101,9 +106,11 @@ public/
     messages.js         Textes français et anglais
     open-library.js     Recherche et normalisation des métadonnées
     reading-status.js   Statuts de lecture et valeurs par défaut
-    storage.js          Lecture et validation des listes existantes
+    storage.js          Validation et reprise des anciennes listes
+    api.js              Client HTTP du stockage serveur
     utils.js            Échappement HTML et normalisation du texte
-src/server.js           Serveur HTTP Bun
+src/server.js           Serveur HTTP Bun et API
+src/database.js         Base SQLite et transactions
 tests/unit/             Tests Bun
 tests/browser/          Tests Playwright
 Dockerfile
@@ -127,9 +134,9 @@ est explicitement `fr-FR`, y compris pour le document HTML et le formatage des
 nombres, quelle que soit la variante de français du navigateur.
 
 Le sélecteur de la barre latérale permet de changer la langue immédiatement,
-sur ordinateur et mobile. Le choix est mémorisé localement sous la clé
-`en-marge-language-v1` et prévaut sur la langue du navigateur. Si le stockage est
-indisponible, le changement reste valable pour la page ouverte.
+sur ordinateur et mobile. Le choix est enregistré dans SQLite côté serveur et
+prévaut sur la langue du navigateur. Il est commun à cette instance. En cas
+d’échec d’enregistrement, la langue précédente est conservée.
 
 Les livres de la sélection disposent de titres, résumés, couvertures et références
 d’édition en français et en anglais. Le changement de langue adapte aussi leur
@@ -158,20 +165,41 @@ livre de la liste et dans sa fiche permet de passer à **En cours**, **Lu** ou
 statut permettent de retrouver chaque groupe de livres.
 
 Les listes existantes sont conservées : un livre sans statut est considéré comme
-**À lire**. Les statuts sont enregistrés avec les livres dans le navigateur et
+**À lire**. Les statuts sont enregistrés avec les livres dans la base du serveur et
 inclus dans l’export JSON (`to-read`, `reading`, `read`, `abandoned`).
 
 ## Données
 
-La liste reste enregistrée dans `localStorage`, avec la clé d’origine
-`en-marge-wishlist-v1`. Elle n’est ni synchronisée entre appareils, ni envoyée au
-serveur Bun. Aucun contenu de livre numérique n’est hébergé.
+La bibliothèque est conservée dans une base SQLite côté serveur, par défaut
+`./data/en-marge.sqlite`. `DATABASE_PATH` permet de changer ce chemin. Son dossier
+est créé au démarrage et doit être accessible en écriture. Aucun contenu de livre
+numérique n’est hébergé. Les données ne sont plus enregistrées dans le navigateur.
 
-Le stockage dépend de l’origine du navigateur : protocole, hôte et port. Pour
-retrouver une ancienne liste, utiliser la même adresse qu’auparavant.
-`localhost`, `127.0.0.1`, une ouverture `file://` ou un changement de port
-correspondent à des espaces distincts. L’export JSON reste accessible depuis
-l’icône d’information. Effacer les données du navigateur efface la liste.
+L’application n’a pas de comptes utilisateurs : tous les visiteurs de cette
+instance partagent la même bibliothèque et la même préférence de langue.
+Les autres onglets et appareils actualisent la bibliothèque toutes les trois
+secondes lorsqu’ils sont visibles, ainsi qu’au retour sur la fenêtre. Une
+modification concurrente est refusée et la bibliothèque actualisée pour permettre
+de réessayer, sans écraser les changements d’un autre appareil.
+
+Les anciennes listes `en-marge-wishlist-v1` sont importées automatiquement lors de
+la première visite depuis chaque navigateur d’origine. Les livres déjà présents
+(même identifiant) côté serveur sont conservés. Les anciennes clés locales sont
+supprimées uniquement après succès du transfert ; en cas d’échec, la liste reste
+disponible pour une nouvelle tentative après actualisation. Il faut ouvrir la
+même origine qu’avant pour permettre la reprise des données locales existantes.
+
+API JSON : `GET /api/library`, `PUT /api/library` avec `{ books, revision }`,
+`POST /api/library/import` avec `{ books }`, et `GET`/`PUT /api/settings` pour la
+langue (`{ language: "fr" }` ou `"en"`). Les écritures de bibliothèque sont
+transactionnelles. Une révision périmée renvoie `409`. Les corps invalides sont
+refusés ; les requêtes sont limitées à 10 Mio. Une panne serveur ne déclenche
+aucun repli vers un stockage navigateur.
+
+Pour sauvegarder la base, arrêter l’application puis copier le dossier de données
+complet (incluant les éventuels fichiers SQLite `-wal` et `-shm`). Avec Docker,
+sauvegarder le volume `en-marge-data`. L’export JSON reste accessible depuis
+l’icône d’information.
 
 Une connexion Internet est nécessaire pour Open Library, les couvertures et les
 polices Google Fonts. En cas d’échec d’une recherche, la sélection locale est

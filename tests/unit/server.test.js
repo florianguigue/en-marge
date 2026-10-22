@@ -3,7 +3,11 @@ import { parsePort, startServer } from "../../src/server.js";
 
 let server;
 beforeAll(() => {
-  server = startServer({ port: 0, hostname: "127.0.0.1" });
+  server = startServer({
+    port: 0,
+    hostname: "127.0.0.1",
+    databasePath: ":memory:",
+  });
 });
 afterAll(() => server?.stop(true));
 const request = (path, options) => fetch(new URL(path, server.url), options);
@@ -15,6 +19,7 @@ test("serves the app and every JavaScript module with usable content types", asy
   expect(await index.text()).toContain('type="module"');
   for (const file of [
     "app",
+    "api",
     "catalogue",
     "book-editions",
     "icons",

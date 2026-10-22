@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures.js";
 import { readFile } from "node:fs/promises";
 
 test.beforeEach(async ({ context }) => {
@@ -67,9 +67,7 @@ test("a manual language choice survives reload without changing the library", as
   await page.locator(".save-book").first().click();
   await page.locator('[data-nav="wishlist"]').click();
   await page.locator("#books [data-reading-status]").selectOption("reading");
-  const before = await page.evaluate(() =>
-    localStorage.getItem("en-marge-wishlist-v1"),
-  );
+  const before = (await (await page.request.get("/api/library")).json()).books;
   await page.locator("#language-select").selectOption("en");
   await expect(page.locator('[data-nav="wishlist"]')).toContainText(
     "My library",
@@ -91,9 +89,9 @@ test("a manual language choice survives reload without changing the library", as
     "reading",
   );
   await expect(page.locator(".book-title")).toHaveText("The Hobbit");
-  expect(
-    await page.evaluate(() => localStorage.getItem("en-marge-wishlist-v1")),
-  ).toBe(before);
+  expect((await (await page.request.get("/api/library")).json()).books).toEqual(
+    before,
+  );
   await page.locator("#language-select").selectOption("fr");
   await page.reload();
   await expect(page.locator("html")).toHaveAttribute("lang", "fr-FR");
@@ -213,16 +211,16 @@ test("changing language in another tab translates an open form without losing it
 test("language switching remains usable when saving preferences is unavailable", async ({
   page,
 }) => {
-  await page.addInitScript(() => {
-    Storage.prototype.setItem = () => {
-      throw new Error("Storage unavailable");
-    };
-  });
+  await page.route("**/api/settings", (route) =>
+    route.request().method() === "PUT"
+      ? route.fulfill({ status: 503, json: { error: "Unavailable" } })
+      : route.continue(),
+  );
   await page.goto("/");
   await page.locator("#language-select").selectOption("en");
-  await expect(page.locator("html")).toHaveAttribute("lang", "en");
+  await expect(page.locator("html")).toHaveAttribute("lang", "fr-FR");
   await expect(page.locator("#toast")).toContainText(
-    "could not save your preference",
+    "Le serveur n’a pas pu enregistrer la langue",
   );
   await page.reload();
   await expect(page.locator("html")).toHaveAttribute("lang", "fr-FR");

@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures.js";
 import { readFileSync } from "node:fs";
 
 // Real Open Library response: volumes 2 and 3 have no indexed language.
