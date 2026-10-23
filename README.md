@@ -293,7 +293,7 @@ Dans ChatGPT sur le web, ouvrir les plugins, puis **Ajouter un serveur MCP
 personnalisé** (selon les permissions de votre compte ou espace). Donner le nom
 « En marge », saisir `https://en-marge.home.florianguigue.fr/mcp` et choisir
 **Sans authentification**. Créer puis installer le plugin, et le sélectionner
-avec `@` dans une conversation. Les outils `list_books`, `add_book` et
+avec `@` dans une conversation. Les outils `list_books`, `search_books`, `add_book` et
 `delete_book` seront disponibles, avec les confirmations d’écriture prévues par
 ChatGPT. Aucune clé API OpenAI n’est nécessaire dans cette application.
 
@@ -302,19 +302,50 @@ et [HTTPS automatique Caddy](https://caddyserver.com/docs/automatic-https).
 
 ## Outils MCP et accès local
 
-Le serveur expose trois outils aux clients MCP :
+Le serveur expose quatre outils aux clients MCP :
 
-| Outil         | Paramètres                                                                                    | Résultat                                  |
-| ------------- | --------------------------------------------------------------------------------------------- | ----------------------------------------- |
-| `list_books`  | Aucun                                                                                         | Livres, identifiants et révision courante |
-| `add_book`    | `title`, `author` obligatoires ; `status`, `tags`, `description`, `year`, `pages` facultatifs | Livre créé avec son identifiant           |
-| `delete_book` | `id`, obtenu avec `list_books`                                                                | Livre supprimé                            |
+| Outil          | Paramètres                                                                                                      | Résultat                                                                          |
+| -------------- | --------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `list_books`   | Aucun                                                                                                           | Livres, identifiants et révision courante                                         |
+| `search_books` | `query` obligatoire ; `language`, `page` facultatifs                                                            | Résultats Hardcover, identifiants, pagination et avertissements                   |
+| `add_book`     | `title` (ou ISBN) obligatoire ; `author`, `language`, `status`, `tags`, `candidate_id`, `confirmed` facultatifs | Fiche ajoutée, livre déjà présent, proposition à confirmer ou absence de résultat |
+| `delete_book`  | `id`, obtenu avec `list_books`                                                                                  | Livre supprimé                                                                    |
 
 Les statuts acceptés sont `to-read` (défaut), `reading`, `read`, `abandoned`.
-Les ajouts créent des fiches manuelles, avec un identifiant unique ; deux appels
-identiques créent deux livres. La suppression est définitive et porte uniquement
-sur l’identifiant demandé. Un identifiant absent renvoie une erreur sans modifier
-la bibliothèque. Le SDK valide les paramètres avant toute écriture.
+`add_book` recherche dans Hardcover, classe les résultats selon le titre et l’auteur,
+puis récupère la fiche et ses éditions. Il choisit de préférence une édition dans
+la langue demandée (`fr` ou `en`), ou celle de la bibliothèque si elle est omise.
+Un ISBN désigne son édition exacte. La fiche ajoutée conserve les identifiants
+Hardcover, la couverture, l’ISBN, les métadonnées, les sources et les sagas ; les
+tags personnels complètent ceux du catalogue.
+
+Une correspondance exacte et suffisamment distincte des autres résultats peut être
+ajoutée directement (`outcome: "added"`). En cas de titre approximatif, d’auteur
+différent, de résultats ambigus ou de langue différente/inconnue, le serveur renvoie
+`outcome: "needs_confirmation"`, avec `recommended` et `candidates`, sans écrire.
+Le client doit présenter la fiche (titre, auteur, langue, édition) et demander le
+choix de l’utilisateur. Après accord explicite, il rappelle `add_book` avec le même
+titre et l’identifiant choisi dans `candidate_id`, accompagné de `confirmed: true`.
+Un booléen de confirmation sans identifiant est refusé. Ce parcours fonctionne
+aussi avec le transport HTTP sans session.
+
+Exemple : `add_book({"title":"Duune","author":"Frank Herbert"})` propose la
+fiche de _Dune_ sans l’ajouter. Après confirmation de l’utilisateur, le client
+rappelle l’outil avec `{"title":"Duune","author":"Frank Herbert","candidate_id":"<id retourné>","confirmed":true}`.
+`search_books` permet également de comparer les résultats et de parcourir les pages
+avant de choisir une fiche.
+
+Un livre ayant déjà le même identifiant, la même œuvre Hardcover ou le même ISBN
+renvoie `outcome: "already_exists"` sans modifier ses tags, son statut ou la révision.
+L’absence de résultat renvoie `outcome: "not_found"`. Hardcover doit être activé et
+`HARDCOVER_API_TOKEN` configuré : une panne ou une configuration absente renvoie une
+erreur, sans création de fiche manuelle ni repli de recherche vers Google Books.
+Les anciens champs manuels `description`, `year` et `pages` ne sont plus acceptés
+par `add_book` ; les données viennent de la fiche du catalogue.
+
+La suppression est définitive et porte uniquement sur l’identifiant demandé. Un
+identifiant absent renvoie une erreur sans modifier la bibliothèque. Le SDK valide
+les paramètres avant toute écriture.
 
 Après `bun install --frozen-lockfile`, lancer :
 
@@ -337,7 +368,8 @@ Exemple de configuration pour un client acceptant une section `mcpServers`
       "command": "/chemin/absolu/vers/bun",
       "args": ["/chemin/absolu/vers/en-marge/src/mcp.js"],
       "env": {
-        "DATABASE_PATH": "/chemin/absolu/vers/en-marge/data/en-marge.sqlite"
+        "DATABASE_PATH": "/chemin/absolu/vers/en-marge/data/en-marge.sqlite",
+        "HARDCOVER_API_TOKEN": "<jeton personnel Hardcover>"
       }
     }
   }
@@ -361,7 +393,10 @@ docker compose -f /chemin/absolu/vers/en-marge/compose.yaml exec -T en-marge bun
 Exemples de demandes au client connecté : « Liste les livres de ma bibliothèque »,
 « Ajoute Dune de Frank Herbert », « Supprime le livre dont l’identifiant est … ».
 Les tests MCP couvrent l’initialisation, la découverte des outils, la validation,
-la persistance, le partage SQLite et les révisions après ajout ou suppression.
+la recherche et le classement, la confirmation sans écriture, le choix de langue
+et d’édition ISBN, les pannes, les doublons, la persistance, le partage SQLite et
+les révisions après ajout ou suppression. Les tests utilisent des données Hardcover
+simulées et ne nécessitent aucun jeton personnel.
 
 Référence : [SDK MCP officiel et transport stdio](https://ts.sdk.modelcontextprotocol.io/v2/).
 

@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { startServer } from "../../src/server.js";
+import { hardcoverFixture } from "../fixtures/hardcover.js";
 
 async function rpc(server, method, params = {}, headers = {}) {
   const response = await fetch(new URL("/mcp", server.url), {
@@ -31,6 +32,7 @@ test("remote MCP serves public tools over Streamable HTTP and shares the web lib
     port: 0,
     databasePath: ":memory:",
     publicUrl: "",
+    metadataService: hardcoverFixture(),
   });
   try {
     const initialized = await rpc(server, "initialize", {
@@ -46,9 +48,14 @@ test("remote MCP serves public tools over Streamable HTTP and shares the web lib
       "add_book",
       "delete_book",
       "list_books",
+      "search_books",
     ]);
     const call = async (name, args = {}) =>
       (await rpc(server, "tools/call", { name, arguments: args })).data.result;
+    expect(
+      (await call("search_books", { query: "Dune" })).structuredContent.books[0]
+        .id,
+    ).toBe("hardcover:12");
     const book = (
       await call("add_book", { title: "Dune", author: "Frank Herbert" })
     ).structuredContent.book;
@@ -99,7 +106,7 @@ test("HTTPS reverse proxy origin permits browser edits and MCP without trusting 
     const headers = { Host: "en-marge.home.florianguigue.fr", Origin: origin };
     expect(
       (await rpc(server, "tools/list", {}, headers)).data.result.tools,
-    ).toHaveLength(3);
+    ).toHaveLength(4);
     const edit = await fetch(new URL("/api/library", server.url), {
       method: "PUT",
       headers: { ...headers, "Content-Type": "application/json" },
@@ -134,6 +141,50 @@ test("HTTPS reverse proxy origin permits browser edits and MCP without trusting 
       ).response.status,
     ).toBe(403);
     expect((await fetch(new URL("/healthz", server.url))).status).toBe(200);
+  } finally {
+    await server.stop(true);
+  }
+});
+
+test("HTTP confirmation survives independent requests and rejects invalid confirmations without writing", async () => {
+  const server = startServer({
+    port: 0,
+    databasePath: ":memory:",
+    publicUrl: "",
+    metadataService: hardcoverFixture(),
+  });
+  const call = async (args) =>
+    (await rpc(server, "tools/call", { name: "add_book", arguments: args }))
+      .data.result;
+  const library = async () =>
+    (await fetch(new URL("/api/library", server.url))).json();
+  try {
+    const proposal = (await call({ title: "Duune", author: "Frank Herbert" }))
+      .structuredContent;
+    expect(proposal.outcome).toBe("needs_confirmation");
+    expect(await library()).toEqual({ books: [], revision: 0 });
+    for (const args of [
+      { title: "Duune", confirmed: true },
+      { title: "Dune", pages: 123 },
+      { title: "Duune", candidate_id: "manual:1", confirmed: true },
+      { title: "Duune", candidate_id: "hardcover:999", confirmed: true },
+    ])
+      expect((await call(args)).isError).toBe(true);
+    expect(await library()).toEqual({ books: [], revision: 0 });
+    const args = {
+      title: "Duune",
+      author: "Frank Herbert",
+      candidate_id: proposal.recommended.id,
+      confirmed: true,
+      tags: ["Conseillé"],
+      status: "reading",
+    };
+    const added = (await call(args)).structuredContent;
+    expect(added.outcome).toBe("added");
+    expect(added.book.tags).toContain("Conseillé");
+    expect(added.book.status).toBe("reading");
+    expect((await call(args)).structuredContent.outcome).toBe("already_exists");
+    expect((await library()).revision).toBe(1);
   } finally {
     await server.stop(true);
   }

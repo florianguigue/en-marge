@@ -47,9 +47,12 @@ export function startServer({
   }
   const store = openStore(databasePath);
   const catalogue = metadataService || createMetadataService({ store });
-  const mcp = createMcpHandler(() => createLibraryMcpServer({ store }), {
-    maxRequestBodySize: 1024 * 1024,
-  });
+  const mcp = createMcpHandler(
+    () => createLibraryMcpServer({ store, metadataService: catalogue }),
+    {
+      maxRequestBodySize: 1024 * 1024,
+    },
+  );
   let server;
   try {
     server = Bun.serve({

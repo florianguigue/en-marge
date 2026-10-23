@@ -58,6 +58,23 @@ export function openStore(
       write.run(JSON.stringify(books));
       return books.at(-1);
     }).immediate,
+    addCatalogueBook: db.transaction((book) => {
+      const current = read();
+      const existing = current.books.find(
+        (entry) =>
+          entry.id === book.id ||
+          (book.workId && entry.workId === book.workId) ||
+          (book.externalIds?.hardcover &&
+            entry.externalIds?.hardcover === book.externalIds.hardcover) ||
+          book.isbns?.some(
+            (isbn) => entry.isbns?.includes(isbn) || entry.isbn === isbn,
+          ),
+      );
+      if (existing) return { outcome: "already_exists", book: existing };
+      const books = validateBooks([...current.books, book]);
+      write.run(JSON.stringify(books));
+      return { outcome: "added", book: books.at(-1) };
+    }).immediate,
     remove: db.transaction((id) => {
       const current = read();
       const book = current.books.find((entry) => entry.id === id);

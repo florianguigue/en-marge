@@ -6,13 +6,19 @@ import { join } from "node:path";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 import { openStore } from "../../src/database.js";
+import { hardcoverFixture } from "../fixtures/hardcover.js";
 
 async function connect(databasePath) {
   const child = spawn(
     process.execPath,
     [fileURLToPath(new URL("../../src/mcp.js", import.meta.url))],
     {
-      env: { ...process.env, DATABASE_PATH: databasePath },
+      env: {
+        ...process.env,
+        DATABASE_PATH: databasePath,
+        HARDCOVER_API_TOKEN: "test-token",
+        METADATA_DISABLED_PROVIDERS: "google-books",
+      },
       stdio: ["pipe", "pipe", "pipe"],
     },
   );
@@ -62,12 +68,21 @@ test("MCP stdio lists, validates, adds and deletes persistent books shared with 
   const store = openStore(path);
   let client;
   try {
+    // Prewarm the persistent catalogue cache; the stdio child uses the real
+    // service without making network calls or using personal credentials.
+    const catalogue = hardcoverFixture({ store });
+    await catalogue.search({
+      query: "Dune Frank Herbert",
+      provider: "hardcover",
+    });
+    await catalogue.book({ provider: "hardcover", id: "12" });
     client = await connect(path);
     const tools = (await client.request("tools/list")).result.tools;
     expect(tools.map((tool) => tool.name).sort()).toEqual([
       "add_book",
       "delete_book",
       "list_books",
+      "search_books",
     ]);
     expect(
       tools.find((tool) => tool.name === "delete_book").annotations
@@ -93,7 +108,10 @@ test("MCP stdio lists, validates, adds and deletes persistent books shared with 
     ).structuredContent.book;
     expect(added.title).toBe("Dune");
     expect(added.status).toBe("to-read");
-    expect(added.id).toStartWith("manual:");
+    expect(added.id).toBe("hardcover:12:edition:120");
+    expect(added.manual).toBe(false);
+    expect(added.publisher).toBe("Éditeur");
+    expect(added.series[0].name).toBe("Dune");
     expect(store.read()).toEqual({ books: [added], revision: 1 });
     // An edit based on the UI's previous revision must not overwrite an MCP addition.
     expect(store.replace([], 0)).toBeNull();
