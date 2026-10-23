@@ -302,16 +302,24 @@ et [HTTPS automatique Caddy](https://caddyserver.com/docs/automatic-https).
 
 ## Outils MCP et accès local
 
-Le serveur expose quatre outils aux clients MCP :
+Le serveur expose cinq outils aux clients MCP :
 
-| Outil          | Paramètres                                                                                                      | Résultat                                                                          |
-| -------------- | --------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| `list_books`   | Aucun                                                                                                           | Livres, identifiants et révision courante                                         |
-| `search_books` | `query` obligatoire ; `language`, `page` facultatifs                                                            | Résultats Hardcover, identifiants, pagination et avertissements                   |
-| `add_book`     | `title` (ou ISBN) obligatoire ; `author`, `language`, `status`, `tags`, `candidate_id`, `confirmed` facultatifs | Fiche ajoutée, livre déjà présent, proposition à confirmer ou absence de résultat |
-| `delete_book`  | `id`, obtenu avec `list_books`                                                                                  | Livre supprimé                                                                    |
+| Outil                | Paramètres                                                                                                      | Résultat                                                                          |
+| -------------------- | --------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `list_books`         | Aucun                                                                                                           | Livres, identifiants et révision courante                                         |
+| `search_books`       | `query` obligatoire ; `language`, `page` facultatifs                                                            | Résultats Hardcover, identifiants, pagination et avertissements                   |
+| `add_book`           | `title` (ou ISBN) obligatoire ; `author`, `language`, `status`, `tags`, `candidate_id`, `confirmed` facultatifs | Fiche ajoutée, livre déjà présent, proposition à confirmer ou absence de résultat |
+| `update_book_status` | `id`, obtenu avec `list_books`, et `status` obligatoires                                                        | Livre avec son statut de lecture mis à jour                                       |
+| `delete_book`        | `id`, obtenu avec `list_books`                                                                                  | Livre supprimé                                                                    |
 
-Les statuts acceptés sont `to-read` (défaut), `reading`, `read`, `abandoned`.
+Les statuts acceptés sont `to-read` (À lire, défaut à l’ajout), `reading` (En cours),
+`read` (Lu), `abandoned` (Abandonné).
+`update_book_status({"id":"<id retourné par list_books>","status":"read"})`
+marque un livre comme lu sans modifier ses tags, ses métadonnées ou les autres livres.
+Le changement est atomique et apparaît dans l’interface lors de son actualisation
+automatique. Répéter le statut actuel ne provoque aucune écriture ni changement de
+révision. Un identifiant absent ou un statut invalide renvoie une erreur sans écriture.
+
 `add_book` recherche dans Hardcover, classe les résultats selon le titre et l’auteur,
 puis récupère la fiche et ses éditions. Il choisit de préférence une édition dans
 la langue demandée (`fr` ou `en`), ou celle de la bibliothèque si elle est omise.
@@ -391,11 +399,13 @@ docker compose -f /chemin/absolu/vers/en-marge/compose.yaml exec -T en-marge bun
 ```
 
 Exemples de demandes au client connecté : « Liste les livres de ma bibliothèque »,
-« Ajoute Dune de Frank Herbert », « Supprime le livre dont l’identifiant est … ».
+« Ajoute Dune de Frank Herbert », « Marque Dune comme lu »,
+« Supprime le livre dont l’identifiant est … ».
 Les tests MCP couvrent l’initialisation, la découverte des outils, la validation,
 la recherche et le classement, la confirmation sans écriture, le choix de langue
 et d’édition ISBN, les pannes, les doublons, la persistance, le partage SQLite et
-les révisions après ajout ou suppression. Les tests utilisent des données Hardcover
+les changements de statut et les révisions après ajout, modification ou suppression.
+Les tests utilisent des données Hardcover
 simulées et ne nécessitent aucun jeton personnel.
 
 Référence : [SDK MCP officiel et transport stdio](https://ts.sdk.modelcontextprotocol.io/v2/).

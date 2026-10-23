@@ -49,6 +49,7 @@ test("remote MCP serves public tools over Streamable HTTP and shares the web lib
       "delete_book",
       "list_books",
       "search_books",
+      "update_book_status",
     ]);
     const call = async (name, args = {}) =>
       (await rpc(server, "tools/call", { name, arguments: args })).data.result;
@@ -95,6 +96,95 @@ test("remote MCP serves public tools over Streamable HTTP and shares the web lib
   }
 });
 
+test("HTTP status updates preserve books, reject invalid requests and protect against stale web edits", async () => {
+  const server = startServer({
+    port: 0,
+    databasePath: ":memory:",
+    publicUrl: "",
+  });
+  const library = async () =>
+    (await fetch(new URL("/api/library", server.url))).json();
+  const call = async (args) =>
+    (
+      await rpc(server, "tools/call", {
+        name: "update_book_status",
+        arguments: args,
+      })
+    ).data.result;
+  try {
+    const saved = await fetch(new URL("/api/library", server.url), {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        books: [
+          {
+            id: "manual:1",
+            title: "Livre",
+            author: "Autrice",
+            status: "to-read",
+            tags: ["Personnel"],
+            description: "Notes à conserver",
+            addedAt: 123,
+          },
+          { id: "manual:2", title: "Autre livre", author: "Auteur" },
+        ],
+        revision: 0,
+      }),
+    });
+    expect(saved.status).toBe(200);
+    const original = await library();
+    const tools = (await rpc(server, "tools/list")).data.result.tools;
+    expect(
+      tools.find((tool) => tool.name === "update_book_status").annotations,
+    ).toMatchObject({
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    });
+    for (const args of [
+      {},
+      { id: "manual:1" },
+      { status: "read" },
+      { id: " ", status: "read" },
+      { id: "manual:1", status: "bad" },
+      { id: "manual:1", status: null },
+      { id: "manual:1", status: "toString" },
+      { id: "manual:1", status: "read", title: "Autre titre" },
+      { id: "missing", status: "read" },
+    ]) {
+      expect((await call(args)).isError).toBe(true);
+      expect(await library()).toEqual(original);
+    }
+    let revision = original.revision;
+    for (const status of ["reading", "read", "abandoned", "to-read"]) {
+      const book = { ...original.books[0], status };
+      const updated = await call({ id: " manual:1 ", status });
+      expect(updated.isError).toBeUndefined();
+      expect(updated.structuredContent.book).toEqual(book);
+      const expected = {
+        books: [book, original.books[1]],
+        revision: ++revision,
+      };
+      expect(await library()).toEqual(expected);
+      // Retrying the same request must leave the revision unchanged.
+      expect(
+        (await call({ id: book.id, status })).structuredContent.book,
+      ).toEqual(book);
+      expect(await library()).toEqual(expected);
+    }
+    const stale = await fetch(new URL("/api/library", server.url), {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(original),
+    });
+    expect(stale.status).toBe(409);
+    expect((await library()).revision).toBe(revision);
+  } finally {
+    await server.stop(true);
+  }
+});
+
 test("HTTPS reverse proxy origin permits browser edits and MCP without trusting forwarded headers", async () => {
   const origin = "https://en-marge.home.florianguigue.fr";
   const server = startServer({
@@ -106,7 +196,7 @@ test("HTTPS reverse proxy origin permits browser edits and MCP without trusting 
     const headers = { Host: "en-marge.home.florianguigue.fr", Origin: origin };
     expect(
       (await rpc(server, "tools/list", {}, headers)).data.result.tools,
-    ).toHaveLength(4);
+    ).toHaveLength(5);
     const edit = await fetch(new URL("/api/library", server.url), {
       method: "PUT",
       headers: { ...headers, "Content-Type": "application/json" },

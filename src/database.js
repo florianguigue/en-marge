@@ -2,6 +2,7 @@ import { Database } from "bun:sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { parseWishlist } from "../public/js/storage.js";
+import { READING_STATUSES } from "../public/js/reading-status.js";
 
 export function openStore(
   path = process.env.DATABASE_PATH || "./data/en-marge.sqlite",
@@ -74,6 +75,20 @@ export function openStore(
       const books = validateBooks([...current.books, book]);
       write.run(JSON.stringify(books));
       return { outcome: "added", book: books.at(-1) };
+    }).immediate,
+    updateBookStatus: db.transaction((id, status) => {
+      if (
+        typeof status !== "string" ||
+        !Object.hasOwn(READING_STATUSES, status)
+      )
+        throw new Error("Statut de lecture invalide.");
+      const current = read();
+      const book = current.books.find((entry) => entry.id === id);
+      if (!book) throw new Error("Livre introuvable.");
+      if (book.status === status) return book;
+      book.status = status;
+      write.run(JSON.stringify(current.books));
+      return book;
     }).immediate,
     remove: db.transaction((id) => {
       const current = read();

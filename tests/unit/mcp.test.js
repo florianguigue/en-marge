@@ -62,7 +62,7 @@ async function connect(databasePath) {
   return { request, close };
 }
 
-test("MCP stdio lists, validates, adds and deletes persistent books shared with the app", async () => {
+test("MCP stdio lists, validates, adds, updates and deletes persistent books shared with the app", async () => {
   const directory = mkdtempSync(join(tmpdir(), "en-marge-mcp-"));
   const path = join(directory, "library.sqlite");
   const store = openStore(path);
@@ -83,6 +83,7 @@ test("MCP stdio lists, validates, adds and deletes persistent books shared with 
       "delete_book",
       "list_books",
       "search_books",
+      "update_book_status",
     ]);
     expect(
       tools.find((tool) => tool.name === "delete_book").annotations
@@ -115,18 +116,27 @@ test("MCP stdio lists, validates, adds and deletes persistent books shared with 
     expect(store.read()).toEqual({ books: [added], revision: 1 });
     // An edit based on the UI's previous revision must not overwrite an MCP addition.
     expect(store.replace([], 0)).toBeNull();
+    const updated = { ...added, status: "read" };
+    expect(
+      (await call("update_book_status", { id: added.id, status: "read" }))
+        .structuredContent.book,
+    ).toEqual(updated);
+    expect(store.read()).toEqual({ books: [updated], revision: 2 });
+    expect(store.replace([added], 1)).toBeNull();
     await client.close();
     client = await connect(path);
-    expect((await call("list_books")).structuredContent.books).toEqual([added]);
+    expect((await call("list_books")).structuredContent.books).toEqual([
+      updated,
+    ]);
     const other = { id: "manual:ui", title: "Autre livre", author: "Autrice" };
     store.import([other]);
     expect((await call("delete_book", { id: "missing" })).isError).toBe(true);
-    expect(store.read().revision).toBe(2);
+    expect(store.read().revision).toBe(3);
     expect(
       (await call("delete_book", { id: added.id })).structuredContent.book,
-    ).toEqual(added);
+    ).toEqual(updated);
     expect(store.read().books.map((book) => book.id)).toEqual([other.id]);
-    expect(store.read().revision).toBe(3);
+    expect(store.read().revision).toBe(4);
   } finally {
     await client?.close();
     store.close();

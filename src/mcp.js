@@ -114,6 +114,21 @@ export function createLibraryMcpServer({
     handle(workflow.add),
   );
   server.registerTool(
+    "update_book_status",
+    {
+      description:
+        "Modifier le statut de lecture d’un livre par son identifiant exact obtenu avec list_books, sans changer ses autres informations. Statuts : to-read (À lire), reading (En cours), read (Lu), abandoned (Abandonné). Répéter le statut actuel ne modifie pas la bibliothèque.",
+      inputSchema: z.object({ id: text, status }).strict(),
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    handle(({ id, status }) => ({ book: store.updateBookStatus(id, status) })),
+  );
+  server.registerTool(
     "delete_book",
     {
       description:
