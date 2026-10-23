@@ -31,9 +31,11 @@ L’interface Java du document sert de contrat conceptuel, transposé en modules
 
 Le navigateur appelle uniquement `/api/catalogue/*` pour les métadonnées. Les
 jetons restent sur le serveur. Les images sont chargées directement chez leur
-hébergeur, avec une couverture de remplacement en cas d’échec. Le catalogue local
-conserve ses références et couvertures historiques Open Library pour rester
-compatible ; il ne déclenche aucun appel à leur API bibliographique.
+hébergeur, avec une couverture de remplacement en cas d’échec. Les livres déjà
+enregistrés conservent leurs références et couvertures historiques Open Library ;
+ils ne déclenchent aucun appel à leur API bibliographique. La page Découvrir et
+les suggestions locales sont retirées, y compris lorsque les API sont indisponibles.
+La recherche permanente de la barre latérale interroge le catalogue à la saisie.
 
 Hardcover est le fournisseur de recherche principal. Google Books est interrogé
 uniquement en cas d’erreur, de résultat vide ou de désactivation de Hardcover.

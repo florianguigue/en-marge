@@ -1,17 +1,17 @@
-import { catalogue } from "./catalogue.js";
+import { legacyBooks } from "./legacy-editions.js";
 import { loadBookMetadata } from "./metadata.js";
 
 const editions = new Map();
 const cacheKey = (workKey, language) => `${workKey}:${language}`;
 const workKeyFor = (book) => book.workKey || book.id;
-const catalogueBook = (book) =>
-  catalogue.find(
+const legacyBook = (book) =>
+  legacyBooks.find(
     (item) => item.id === book.id || item.workKey === workKeyFor(book),
   );
 
 function variantFor(book, language) {
   return (
-    catalogueBook(book)?.translations?.[language] ||
+    legacyBook(book)?.translations?.[language] ||
     book.translations?.[language] ||
     editions.get(cacheKey(workKeyFor(book), language))
   );
@@ -64,15 +64,11 @@ export function localizeBook(book, language) {
     translations: {
       ...(book.language ? { [book.language]: editionMetadata(book) } : {}),
       ...book.translations,
-      ...catalogueBook(book)?.translations,
+      ...legacyBook(book)?.translations,
       [language]: variant,
     },
     originalEdition: false,
   };
-}
-
-export function getCatalogue(language) {
-  return catalogue.map((book) => localizeBook(book, language));
 }
 
 export async function loadBookEditions(books, language, signal) {

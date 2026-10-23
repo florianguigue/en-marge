@@ -40,7 +40,7 @@ for (const language of ["fr", "en"]) {
         },
       });
     });
-    await page.goto("/#discover");
+    await page.goto("/");
     await page.locator("#language-select").selectOption(language);
     await page.locator("#search").fill("Zorhal");
     await page.locator("#search-form").evaluate((form) => form.requestSubmit());

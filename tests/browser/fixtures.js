@@ -1,7 +1,16 @@
 import { test as base, expect } from "@playwright/test";
+import { legacyBooks } from "../../public/js/legacy-editions.js";
 import { execFileSync } from "node:child_process";
 
-export { expect };
+export { expect, legacyBooks };
+export async function seedLibrary(request, books = [legacyBooks[0]]) {
+  const current = await (await request.get("/api/library")).json();
+  const response = await request.put("/api/library", {
+    data: { books, revision: current.revision },
+  });
+  expect(response.ok()).toBe(true);
+}
+
 export const test = base.extend({
   metadataOffline: [
     async ({ context }, use) => {

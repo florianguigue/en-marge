@@ -1,4 +1,4 @@
-import { expect, test } from "./fixtures.js";
+import { expect, test, seedLibrary, legacyBooks } from "./fixtures.js";
 import { readFile } from "node:fs/promises";
 
 test.beforeEach(async ({ context }) => {
@@ -8,30 +8,24 @@ test.beforeEach(async ({ context }) => {
   );
 });
 
-test("catalogue, filters, list view and server persistence", async ({
-  page,
-}) => {
-  await page.goto("/#discover");
-  await expect(page.locator(".book-card")).toHaveCount(8);
-  await expect(page.locator(".book-category")).toHaveText(
-    Array(8).fill("Fantasy"),
-  );
+test("library filters, list view and server persistence", async ({ page }) => {
+  await seedLibrary(page.request, legacyBooks.slice(0, 3));
+  await page.goto("/");
+  await expect(page.locator(".book-card")).toHaveCount(3);
   await page.getByRole("button", { name: "Classiques", exact: true }).click();
   await expect(page.locator(".book-card")).toHaveCount(2);
   await page
     .getByRole("button", { name: "Tous les livres", exact: true })
     .click();
-  await page.locator(".save-book").first().click();
-  await page.getByRole("button", { name: /Ma bibliothèque/ }).click();
-  await expect(page.locator(".book-card")).toHaveCount(1);
+  await expect(page.locator(".book-card")).toHaveCount(3);
   await page.getByRole("button", { name: "Vue en liste", exact: true }).click();
   await expect(page.locator("#books")).toHaveClass("book-grid list");
   await page.reload();
-  await expect(page.locator(".book-card")).toHaveCount(1);
-  await page.locator(".save-book").click();
-  await expect(page.locator(".book-card")).toHaveCount(0);
+  await expect(page.locator(".book-card")).toHaveCount(3);
+  await page.locator(".save-book").first().click();
+  await expect(page.locator(".book-card")).toHaveCount(2);
   await page.getByRole("button", { name: "Annuler", exact: true }).click();
-  await expect(page.locator(".book-card")).toHaveCount(1);
+  await expect(page.locator(".book-card")).toHaveCount(3);
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= innerWidth,
@@ -40,7 +34,7 @@ test("catalogue, filters, list view and server persistence", async ({
 });
 
 test("manual add, edit, tags and JSON export", async ({ page }) => {
-  await page.goto("/#discover");
+  await page.goto("/");
   await page
     .getByRole("button", { name: "Ajouter un livre", exact: true })
     .click();
@@ -100,7 +94,7 @@ test("unified catalogue results and pagination", async ({ page }) => {
       },
     });
   });
-  await page.goto("/#discover");
+  await page.goto("/");
   await page.locator("#search").fill("Dune");
   await page.locator("#search-form").evaluate((form) => form.requestSubmit());
   await expect(page.locator(".book-title")).toHaveText("Dune");
@@ -109,17 +103,17 @@ test("unified catalogue results and pagination", async ({ page }) => {
   await expect(page.locator("#load-more")).toBeHidden();
 });
 
-test("unavailable search falls back to the local catalogue", async ({
-  page,
-}) => {
-  await page.goto("/#discover");
+test("unavailable search shows no suggestions", async ({ page }) => {
+  await page.goto("/");
   await page.locator("#search").fill("Tolkien");
   await page.locator("#search-form").evaluate((form) => form.requestSubmit());
   await expect(page.locator("#search-notice")).toContainText(
     "Le catalogue est indisponible",
   );
-  await expect(page.locator(".book-card")).toHaveCount(1);
-  await expect(page.locator(".book-title")).toHaveText("Le Hobbit");
+  await expect(page.locator(".book-card")).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Réessayer la recherche" }),
+  ).toBeVisible();
 });
 
 test("navigation cancels an in-flight search without replacing the wishlist", async ({
@@ -141,7 +135,7 @@ test("navigation cancels an in-flight search without replacing the wishlist", as
       })
       .catch(() => {});
   });
-  await page.goto("/#discover");
+  await page.goto("/");
   await page.locator("#search").fill("Dune");
   const request = page.waitForRequest("**/api/catalogue/search?*");
   await page.locator("#search-form").evaluate((form) => form.requestSubmit());
@@ -157,9 +151,9 @@ test("navigation cancels an in-flight search without replacing the wishlist", as
 test("reading statuses, filters and persistence from cards and details", async ({
   page,
 }) => {
-  await page.goto("/#discover");
-  await expect(page.locator("#reading-filters")).toBeHidden();
-  await page.locator(".save-book").first().click();
+  await seedLibrary(page.request);
+  await page.goto("/");
+  await expect(page.locator("#reading-filters")).toBeVisible();
   await page.getByRole("button", { name: /Ma bibliothèque/ }).click();
   const status = page.locator("#books [data-reading-status]");
   await expect(status).toHaveValue("to-read");
@@ -238,7 +232,7 @@ test("enriched metadata and sources are displayed and saved with provider covers
       },
     }),
   );
-  await page.goto("/#discover");
+  await page.goto("/");
   await page.locator("#search").fill("enrichi");
   await page.locator("#search-form").evaluate((form) => form.requestSubmit());
   await expect(page.locator("#search-notice")).toContainText(
@@ -287,7 +281,7 @@ test("different editions with the same title and author can be saved independent
       json: { books, total: 2, hasMore: false, provider: "google-books" },
     }),
   );
-  await page.goto("/#discover");
+  await page.goto("/");
   await page.locator("#search").fill("Même titre");
   await page.locator("#search-form").evaluate((form) => form.requestSubmit());
   await expect(page.locator(".book-card")).toHaveCount(2);
@@ -306,7 +300,7 @@ test("old lists default to À lire and status changes synchronize between tabs",
   page,
   context,
 }) => {
-  await page.goto("/#discover");
+  await page.goto("/");
   await page.evaluate(() => {
     localStorage.setItem(
       "en-marge-wishlist-v1",
@@ -340,8 +334,8 @@ test("old lists default to À lire and status changes synchronize between tabs",
 test("an unavailable server does not change the reading status", async ({
   page,
 }) => {
-  await page.goto("/#discover");
-  await page.locator(".save-book").first().click();
+  await seedLibrary(page.request);
+  await page.goto("/");
   await page.getByRole("button", { name: /Ma bibliothèque/ }).click();
   await page.route("**/api/library", (route) =>
     route.request().method() === "PUT"

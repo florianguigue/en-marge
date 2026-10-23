@@ -1,16 +1,15 @@
 import { expect, test, spyOn } from "bun:test";
 import { readFileSync } from "node:fs";
-import { catalogue } from "../../public/js/catalogue.js";
+import { legacyBooks } from "../../public/js/legacy-editions.js";
 import {
-  getCatalogue,
   localizeBook,
   loadBookEditions,
 } from "../../public/js/book-editions.js";
 import { parseBook } from "../../public/js/open-library.js";
 import { searchBooks, loadBookMetadata } from "../../public/js/metadata.js";
 
-test("the fantasy selection has English titles, summaries and verified edition references", () => {
-  const english = getCatalogue("en");
+test("historical saved books retain their translated editions", () => {
+  const english = legacyBooks.map((book) => localizeBook(book, "en"));
   expect(english).toHaveLength(8);
   expect(english[0].title).toBe("The Hobbit");
   expect(english[7].title).toBe("A Winter’s Promise");
@@ -21,12 +20,12 @@ test("the fantasy selection has English titles, summaries and verified edition r
     expect(book.coverId).toBeGreaterThan(0);
     expect(book.isbn.length).toBeGreaterThanOrEqual(10);
   }
-  expect(getCatalogue("fr")[0].title).toBe("Le Hobbit");
+  expect(localizeBook(legacyBooks[0], "fr").title).toBe("Le Hobbit");
 });
 
 test("localizing a saved book preserves its identity, tags, status and original data", () => {
   const saved = {
-    ...catalogue[0],
+    ...legacyBooks[0],
     status: "reading",
     tags: ["Mon tag"],
     addedAt: 42,

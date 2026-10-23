@@ -1,4 +1,4 @@
-import { test, expect } from "./fixtures.js";
+import { test, expect, seedLibrary } from "./fixtures.js";
 
 test.beforeEach(async ({ context }) => {
   await context.route(/https:\/\/(fonts\.|covers\.|openlibrary\.)/, (route) =>
@@ -15,9 +15,8 @@ test("persists independently of browser storage and is shared with a fresh brows
       throw new Error("Browser storage disabled");
     };
   });
-  await page.goto("/#discover");
-  await page.locator(".save-book").first().click();
-  await expect(page.locator("#toast")).toContainText("Une nouvelle envie");
+  await seedLibrary(page.request);
+  await page.goto("/");
   await page.locator('[data-nav="wishlist"]').click();
   await page.locator("#books [data-reading-status]").selectOption("reading");
   await expect(page.locator("#toast")).toContainText("Statut enregistré");
@@ -94,9 +93,12 @@ test("failed initial load cannot overwrite an existing server library", async ({
   await page.route("**/api/library", (route) =>
     route.fulfill({ status: 503, json: {} }),
   );
-  await page.goto("/#discover");
+  await page.goto("/");
   await expect(page.locator("#toast")).toContainText("inaccessible");
-  await page.locator(".save-book").first().click();
+  await page.locator("#manual-open").click();
+  await page.locator('[name="title"]').fill("Autre livre");
+  await page.locator('[name="author"]').fill("Autrice");
+  await page.locator('#manual-form button[type="submit"]').click();
   await expect(page.locator("#toast")).toContainText("n’a pas été modifiée");
   expect((await (await request.get("/api/library")).json()).books[0].id).toBe(
     book.id,

@@ -1,14 +1,5 @@
-export const palette = [
-  "#e8dfd1",
-  "#dfe4d9",
-  "#e9ddd0",
-  "#deded5",
-  "#e4ddce",
-  "#e0e2d4",
-  "#eadfd5",
-  "#dfdbcf",
-];
-export const catalogue = [
+// Historical editions used only to display books already saved by earlier versions.
+export const legacyBooks = [
   {
     id: "/works/OL27482W",
     workKey: "/works/OL27482W",

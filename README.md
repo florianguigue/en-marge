@@ -1,6 +1,6 @@
 # En marge
 
-Une bibliothèque d’envies de lecture : sélection de livres, recherche multi-fournisseur,
+Une bibliothèque d’envies de lecture : recherche multi-fournisseur,
 fiches détaillées, ajout manuel, modification, statuts de lecture, tags, filtres, tri et export JSON.
 L’interface existante est conservée, sur ordinateur et mobile.
 
@@ -99,7 +99,7 @@ public/
   style.css             Styles et adaptation mobile
   js/
     app.js              Interface, navigation et interactions
-    catalogue.js        Sélection de fantasy et éditions françaises/anglaises
+    legacy-editions.js  Compatibilité des éditions des livres déjà enregistrés
     book-editions.js    Affichage des livres dans la langue sélectionnée
     icons.js            Icônes SVG
     i18n.js             Choix de langue et traduction de l’interface
@@ -126,8 +126,17 @@ Les sources à modifier sont désormais dans `public/` et `src/`.
 
 ## Langues et page d’accueil
 
-La page d’accueil ouvre **Ma bibliothèque**. Les liens directs `#discover` et
-`#wishlist` continuent d’ouvrir les onglets correspondants.
+La page d’accueil ouvre **Ma bibliothèque**, sans livres suggérés ni page Découvrir.
+Le champ de recherche du catalogue est toujours accessible dans la barre latérale
+(et dans l’en-tête fixe sur mobile). Une saisie lance la recherche après une pause
+de 350 ms ; Entrée permet de la lancer immédiatement. Les résultats s’affichent
+dans l’espace principal, avec leurs fiches et les actions d’ajout à la bibliothèque.
+
+Un champ distinct filtre uniquement les livres déjà enregistrés. Le lien
+`#wishlist` ouvre la bibliothèque ; les anciens liens `#discover` y sont redirigés.
+Les liens `#search?q=...` conservent la recherche lors d’une actualisation. Effacer
+la recherche ou cliquer sur **Ma bibliothèque** permet de revenir aux livres
+personnels. Les boutons précédent/suivant du navigateur restent utilisables.
 
 L’interface est disponible en français et en anglais. Sans choix manuel, elle
 utilise la première langue française ou anglaise reconnue dans les préférences
@@ -141,8 +150,8 @@ sur ordinateur et mobile. Le choix est enregistré dans SQLite côté serveur et
 prévaut sur la langue du navigateur. Il est commun à cette instance. En cas
 d’échec d’enregistrement, la langue précédente est conservée.
 
-Les livres de la sélection disposent de titres, résumés, couvertures et références
-d’édition en français et en anglais. Le changement de langue adapte aussi leur
+Les livres enregistrés depuis l’ancienne sélection conservent leurs titres,
+résumés, couvertures et références d’édition en français et en anglais. Le changement de langue adapte aussi leur
 affichage dans la bibliothèque, en conservant leurs statuts et tags personnels.
 
 La recherche passe par le serveur et utilise Hardcover en priorité. Google Books
@@ -201,8 +210,8 @@ API catalogue (lecture seule) :
 Une recherche renvoie `{ books, total, page, hasMore, provider, warnings }`.
 `total` est l’estimation du fournisseur, avant dédoublonnage. Une fiche renvoie
 `{ book, warnings }`. Les résultats partiels restent consultables. Si tous les
-fournisseurs échouent, le serveur renvoie `503` et l’interface propose sa sélection
-locale. Une recherche vide valide renvoie une liste vide, sans inventer de livres.
+fournisseurs échouent, le serveur renvoie `503` et l’interface affiche une erreur
+avec une action pour réessayer. Aucun livre suggéré n’est affiché. Une recherche vide valide renvoie une liste vide, sans inventer de livres.
 
 Les anciennes fiches Open Library conservent leurs identifiants, couvertures et
 liens historiques. Aucune recherche, traduction ou récupération de résumé
@@ -390,8 +399,8 @@ sauvegarder le volume `en-marge-data`. L’export JSON reste accessible depuis
 l’icône d’information.
 
 Une connexion Internet est nécessaire pour les fournisseurs, les couvertures et les
-polices Google Fonts. En cas d’échec d’une recherche, la sélection locale est
-utilisée et un message l’indique.
+polices Google Fonts. En cas d’échec d’une recherche, un message permet de
+réessayer ou de créer une fiche manuellement.
 
 ## Git
 

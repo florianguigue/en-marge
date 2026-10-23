@@ -1,4 +1,4 @@
-import { expect, test } from "./fixtures.js";
+import { expect, test, seedLibrary } from "./fixtures.js";
 import { readFile } from "node:fs/promises";
 
 test.beforeEach(async ({ context }) => {
@@ -31,9 +31,11 @@ for (const [locale, language, library] of [
       );
       await expect(page.locator("#language-select")).toHaveValue(language);
       await page.goto("/#discover");
-      await expect(page.locator(".book-card")).toHaveCount(8);
+      await expect(page.locator(".book-card")).toHaveCount(0);
+      await expect(page.locator('[data-nav="discover"]')).toHaveCount(0);
+      await expect(page).toHaveURL(/#wishlist$/);
       await page.reload();
-      await expect(page.locator('[data-nav="discover"]')).toHaveAttribute(
+      await expect(page.locator('[data-nav="wishlist"]')).toHaveAttribute(
         "aria-current",
         "page",
       );
@@ -63,8 +65,8 @@ test("falls back to French when the browser provides no usable locale", async ({
 test("a manual language choice survives reload without changing the library", async ({
   page,
 }) => {
-  await page.goto("/#discover");
-  await page.locator(".save-book").first().click();
+  await seedLibrary(page.request);
+  await page.goto("/");
   await page.locator('[data-nav="wishlist"]').click();
   await page.locator("#books [data-reading-status]").selectOption("reading");
   const before = (await (await page.request.get("/api/library")).json()).books;
@@ -81,7 +83,7 @@ test("a manual language choice survives reload without changing the library", as
   ).toHaveText("Reading");
   await expect(page.locator("#search")).toHaveAttribute(
     "placeholder",
-    "Search my library…",
+    "Title, author, ISBN…",
   );
   await page.reload();
   await expect(page.locator("html")).toHaveAttribute("lang", "en");
@@ -164,7 +166,7 @@ test.describe("English interface", () => {
   test("search uses English and existing error messages change language immediately", async ({
     page,
   }) => {
-    await page.goto("/#discover");
+    await page.goto("/");
     await page.locator("#search").fill("Tolkien");
     const requestPromise = page.waitForRequest("**/api/catalogue/search?*");
     await page.locator("#search-form").evaluate((form) => form.requestSubmit());
@@ -178,7 +180,7 @@ test.describe("English interface", () => {
       "Le catalogue est indisponible",
     );
     await expect(page.locator("#search")).toHaveValue("Tolkien");
-    await expect(page.locator(".book-card")).toHaveCount(1);
+    await expect(page.locator(".book-card")).toHaveCount(0);
   });
 });
 

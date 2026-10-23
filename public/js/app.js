@@ -1,11 +1,16 @@
 import { icon } from "./icons.js";
 import { esc, normal } from "./utils.js";
-import { catalogue, palette } from "./catalogue.js";
-import {
-  getCatalogue,
-  localizeBook,
-  loadBookEditions,
-} from "./book-editions.js";
+const palette = [
+  "#e8dfd1",
+  "#dfe4d9",
+  "#e9ddd0",
+  "#deded5",
+  "#e4ddce",
+  "#e0e2d4",
+  "#eadfd5",
+  "#dfdbcf",
+];
+import { localizeBook, loadBookEditions } from "./book-editions.js";
 import { STORAGE, parseWishlist } from "./storage.js";
 import {
   loadLibrary,
@@ -76,12 +81,34 @@ try {
     localStorage.removeItem(LANGUAGE_STORAGE);
   } catch {}
 } catch {}
+function readRoute() {
+  const [page, params] = location.hash.slice(1).split("?");
+  const query = new URLSearchParams(params).get("q")?.trim() || "";
+  return page === "search" && query
+    ? { page: "search", query }
+    : { page: "wishlist", query: "" };
+}
+function writeRoute(page, query = "") {
+  const hash =
+    page === "search"
+      ? `#search?${new URLSearchParams({ q: query })}`
+      : "#wishlist";
+  if (location.hash === hash) return;
+  history[readRoute().page === page ? "replaceState" : "pushState"](
+    null,
+    "",
+    hash,
+  );
+}
+const initialRoute = readRoute();
+let inputTimer;
 let state = {
-  page: location.hash === "#discover" ? "discover" : "wishlist",
+  page: initialRoute.page,
   genre: "Tous",
   pages: "all",
   readingStatus: "all",
-  query: "",
+  query: initialRoute.query,
+  libraryQuery: "",
   view: "grid",
   sort: "default",
   remote: null,
@@ -213,9 +240,7 @@ async function changeReadingStatus(control) {
 }
 function find(id) {
   const book =
-    saved.find((b) => b.id === id) ||
-    state.remote?.find((b) => b.id === id) ||
-    catalogue.find((b) => b.id === id);
+    saved.find((b) => b.id === id) || state.remote?.find((b) => b.id === id);
   if (!book) return undefined;
   const localized = localizeBook(book, getLanguage());
   return { ...localized, ...metadataDetails.get(`${id}:${getLanguage()}`) };
@@ -284,10 +309,7 @@ function sourceBooks() {
   const language = getLanguage();
   if (state.page === "wishlist")
     return saved.map((book) => localizeBook(book, language));
-  return (
-    state.remote?.map((book) => localizeBook(book, language)) ??
-    getCatalogue(language)
-  );
+  return state.remote?.map((book) => localizeBook(book, language)) || [];
 }
 function filtered() {
   let books = sourceBooks().filter((b) => {
@@ -299,12 +321,12 @@ function filtered() {
       return false;
     if (
       state.page === "wishlist" &&
-      state.query &&
+      state.libraryQuery &&
       !normal(
         [b.title, b.author, b.isbn, ...b.tags, ...b.tags.map(genreLabel)].join(
           " ",
         ),
-      ).includes(normal(state.query))
+      ).includes(normal(state.libraryQuery))
     )
       return false;
     if (
@@ -334,9 +356,14 @@ function render() {
   const wish = state.page === "wishlist";
   $(".collection").setAttribute(
     "aria-label",
-    wish ? t("library") : t("discoverBooks"),
+    wish ? t("library") : t("searchResults"),
   );
-  $("#search").placeholder = wish ? t("searchLibrary") : t("searchPlaceholder");
+  $("#collection-title").textContent = wish ? t("library") : t("searchResults");
+  $("#search-query").hidden = wish;
+  $("#search-query").textContent = wish
+    ? ""
+    : t("searchFor", { query: state.query });
+  $("#library-filter").hidden = !wish;
   $("#search-clear").hidden = !$("#search").value;
   $("#nav-count").textContent = saved.length;
   $$("[data-nav]").forEach((b) => {
@@ -348,9 +375,7 @@ function render() {
   });
   $('#sort option[value="default"]').textContent = wish
     ? t("recentlyAdded")
-    : state.remote
-      ? t("relevance")
-      : t("ourSelection");
+    : t("relevance");
   $$("[data-genre]").forEach((b) =>
     b.classList.toggle("active", b.dataset.genre === state.genre),
   );
@@ -371,12 +396,10 @@ function render() {
     ? t("searching")
     : wish
       ? t("inLibrary", { books: booksLabel })
-      : state.remote
-        ? t(pluralKey("remoteCount", books.length), {
-            books: booksLabel,
-            total: formatNumber(state.remoteTotal),
-          })
-        : t("discoverCount", { books: booksLabel });
+      : t(pluralKey("remoteCount", books.length), {
+          books: booksLabel,
+          total: formatNumber(state.remoteTotal),
+        });
   $("#search-notice").hidden = !state.notice;
   $("#search-notice").textContent = state.notice ? t(state.notice) : "";
   $("#books").className = "book-grid" + (state.view === "list" ? " list" : "");
@@ -389,14 +412,16 @@ function render() {
       : `<div class="empty">${icon(emptyLibrary ? "library" : "search")}
         <h3>${t(emptyLibrary ? "emptyLibraryTitle" : "emptyResultsTitle")}</h3>
         <p>${t(emptyLibrary ? "emptyLibraryText" : "emptyResultsText")}</p>
-        <button class="primary" id="empty-action">${t(emptyLibrary ? "discoverBooks" : "resetFilters")} ${icon("arrow")}</button>
+        <button class="primary" id="empty-action">${t(emptyLibrary ? "searchBook" : state.notice === "searchUnavailable" ? "retrySearch" : "resetFilters")} ${icon("arrow")}</button>
       </div>`;
   $("#load-more").hidden =
     wish || !state.remote || !state.remoteHasMore || state.busy;
-  $("#search-form button[type=submit]").disabled = state.busy;
+  $("#search-form button[type=submit]").disabled = !$("#search").value.trim();
+  $("#books").setAttribute("aria-busy", String(state.busy));
   bindImageFallback();
 }
-function navigate(page) {
+function navigate(page = "wishlist") {
+  clearTimeout(inputTimer);
   controller?.abort();
   controller = null;
   state = {
@@ -404,6 +429,7 @@ function navigate(page) {
     page,
     genre: "Tous",
     query: "",
+    libraryQuery: "",
     pages: "all",
     readingStatus: "all",
     sort: "default",
@@ -413,9 +439,10 @@ function navigate(page) {
     busy: false,
   };
   $("#search").value = "";
+  $("#library-search").value = "";
   $("#sort").value = "default";
   $("#pages-filter").value = "all";
-  location.hash = page;
+  writeRoute(page);
   render();
 }
 function renderToast() {
@@ -577,22 +604,22 @@ async function loadDetails(b) {
   } catch {}
 }
 async function search(more = false) {
-  if (state.page === "wishlist") {
-    state.query = $("#search").value.trim();
-    render();
-    return;
-  }
+  clearTimeout(inputTimer);
   const q = $("#search").value.trim();
   if (!q) {
-    controller?.abort();
-    controller = null;
-    state.remote = null;
-    state.query = "";
-    state.notice = "";
-    state.busy = false;
-    render();
+    navigate("wishlist");
     return;
   }
+  if (state.page !== "search") {
+    state.genre = "Tous";
+    state.pages = "all";
+    state.readingStatus = "all";
+    state.sort = "default";
+    $("#sort").value = "default";
+    $("#pages-filter").value = "all";
+  }
+  state.page = "search";
+  writeRoute("search", q);
   controller?.abort();
   controller = null;
   controller = new AbortController();
@@ -634,17 +661,7 @@ async function search(more = false) {
       state.remotePage--;
       state.notice = "nextResultsUnavailable";
     } else {
-      state.remote = getCatalogue(getLanguage()).filter((b) =>
-        normal(
-          [
-            b.title,
-            b.author,
-            b.isbn,
-            ...b.tags,
-            ...b.tags.map(genreLabel),
-          ].join(" "),
-        ).includes(normal(q)),
-      );
+      state.remote = [];
       state.remoteTotal = state.remote.length;
       state.remoteHasMore = false;
       state.notice = "searchUnavailable";
@@ -662,14 +679,8 @@ function resetFilters() {
   state.genre = "Tous";
   state.pages = "all";
   $("#pages-filter").value = "all";
-  if (state.page === "wishlist" || (state.remote && !state.remote.length)) {
-    state.query = "";
-    $("#search").value = "";
-    if (state.page === "discover") {
-      state.remote = null;
-      state.notice = "";
-    }
-  }
+  state.libraryQuery = "";
+  $("#library-search").value = "";
   render();
 }
 function updateManualLabels() {
@@ -717,8 +728,7 @@ function refreshLanguage() {
   if ($("#toast").classList.contains("visible")) renderToast();
   refreshSavedEditions();
   if (
-    state.page === "discover" &&
-    state.remote !== null &&
+    state.page === "search" &&
     state.query &&
     state.remoteLanguage !== getLanguage()
   )
@@ -768,7 +778,8 @@ document.addEventListener("click", async (e) => {
   }
   if (e.target.closest(".close-dialog")) e.target.closest("dialog").close();
   if (e.target.closest("#empty-action")) {
-    if (state.page === "wishlist" && !saved.length) navigate("discover");
+    if (state.page === "wishlist" && !saved.length) $("#search").focus();
+    else if (state.notice === "searchUnavailable") search();
     else resetFilters();
   }
   if (e.target.closest("#save-tags")) {
@@ -821,16 +832,37 @@ $("#search-form").addEventListener("submit", (e) => {
   e.preventDefault();
   search();
 });
-let inputTimer;
 $("#search").addEventListener("input", () => {
-  $("#search-clear").hidden = !$("#search").value;
-  if (state.page === "wishlist") {
-    clearTimeout(inputTimer);
-    inputTimer = setTimeout(() => {
-      state.query = $("#search").value.trim();
-      render();
-    }, 150);
-  } else if (!$("#search").value) search();
+  clearTimeout(inputTimer);
+  controller?.abort();
+  controller = null;
+  const query = $("#search").value.trim();
+  if (!query) {
+    navigate("wishlist");
+    return;
+  }
+  if (state.page !== "search") {
+    state.genre = "Tous";
+    state.pages = "all";
+    state.readingStatus = "all";
+    state.sort = "default";
+    $("#sort").value = "default";
+    $("#pages-filter").value = "all";
+  }
+  state.page = "search";
+  state.query = query;
+  state.remote = [];
+  state.remoteTotal = 0;
+  state.remoteHasMore = false;
+  state.busy = true;
+  state.notice = "";
+  writeRoute("search", query);
+  render();
+  inputTimer = setTimeout(() => search(), 350);
+});
+$("#library-search").addEventListener("input", () => {
+  state.libraryQuery = $("#library-search").value.trim();
+  render();
 });
 $("#search-clear").onclick = () => {
   $("#search").value = "";
@@ -926,10 +958,23 @@ $("#export").onclick = () => {
   link.click();
   setTimeout(() => URL.revokeObjectURL(link.href), 1000);
 };
-window.addEventListener("hashchange", () => {
-  const page = location.hash === "#discover" ? "discover" : "wishlist";
-  if (page !== state.page) navigate(page);
-});
+function restoreRoute() {
+  const route = readRoute();
+  if (
+    route.page === "wishlist" &&
+    location.hash &&
+    location.hash !== "#wishlist"
+  )
+    history.replaceState(null, "", "#wishlist");
+  if (route.page === state.page && route.query === state.query) return;
+  if (route.page === "wishlist") navigate("wishlist");
+  else {
+    $("#search").value = route.query;
+    search();
+  }
+}
+window.addEventListener("hashchange", restoreRoute);
+window.addEventListener("popstate", restoreRoute);
 async function syncSettings() {
   try {
     const settings = await loadSettings();
@@ -958,6 +1003,13 @@ setInterval(() => {
     syncSettings();
   }
 }, 3000);
+$("#search").value = state.query;
+if (
+  location.hash &&
+  initialRoute.page === "wishlist" &&
+  location.hash !== "#wishlist"
+)
+  history.replaceState(null, "", "#wishlist");
 hydrate();
 refreshLanguage();
 if (!storageOK) toast("storageUnreadable");

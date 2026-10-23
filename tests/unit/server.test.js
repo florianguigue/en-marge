@@ -20,7 +20,7 @@ test("serves the app and every JavaScript module with usable content types", asy
   for (const file of [
     "app",
     "api",
-    "catalogue",
+    "legacy-editions",
     "book-editions",
     "icons",
     "i18n",

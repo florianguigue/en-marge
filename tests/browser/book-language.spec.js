@@ -1,4 +1,4 @@
-import { expect, test } from "./fixtures.js";
+import { expect, test, seedLibrary } from "./fixtures.js";
 
 test.beforeEach(async ({ context }) => {
   await context.route(/https:\/\/(fonts\.|covers\.|openlibrary\.)/, (route) =>
@@ -24,25 +24,17 @@ test.describe("French regional locale", () => {
   });
 });
 
-test("fantasy titles, summaries and covers follow the selected language in Discover and the library", async ({
+test("historical saved titles, summaries and covers follow the selected language", async ({
   page,
 }) => {
-  await page.goto("/#discover");
+  await seedLibrary(page.request);
+  await page.goto("/");
   const frenchCover = await page
     .locator(".book-card img")
     .first()
     .getAttribute("src");
   await page.locator("#language-select").selectOption("en");
-  await expect(page.locator(".book-title")).toHaveText([
-    "The Hobbit",
-    "A Wizard of Earthsea",
-    "The Name of the Wind",
-    "Assassin’s Apprentice",
-    "Northern Lights",
-    "Mistborn: The Final Empire",
-    "The Last Wish",
-    "A Winter’s Promise",
-  ]);
+  await expect(page.locator(".book-title")).toHaveText("The Hobbit");
   expect(
     await page.locator(".book-card img").first().getAttribute("src"),
   ).not.toBe(frenchCover);
@@ -55,7 +47,6 @@ test("fantasy titles, summaries and covers follow the selected language in Disco
     /\/books\/OL\d+M$/,
   );
   await page.locator("#book-dialog .close-dialog").click();
-  await page.locator(".save-book").first().click();
   await page.locator('[data-nav="wishlist"]').click();
   await page.locator("#books [data-reading-status]").selectOption("reading");
   await page.locator("#language-select").selectOption("fr");
@@ -117,7 +108,7 @@ test("search and saved works use matching editions, retaining status and tags ac
       json: { book: { ...book, editions: [edition("fr"), edition("en")] } },
     });
   });
-  await page.goto("/#discover");
+  await page.goto("/");
   await page.locator("#language-select").selectOption("en");
   await page.locator("#search").fill("Mists");
   await page.locator("#search-form").evaluate((form) => form.requestSubmit());
@@ -188,7 +179,7 @@ test("switching language replaces an in-flight search with the new edition langu
       })
       .catch(() => {});
   });
-  await page.goto("/#discover");
+  await page.goto("/");
   await page.locator("#language-select").selectOption("en");
   await page.locator("#search").fill("Mists");
   const started = page.waitForRequest("**/api/catalogue/search?*");

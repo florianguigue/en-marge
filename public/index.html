@@ -46,16 +46,52 @@
       <p class="brand-sub" data-i18n="brandSubtitle">
         VOTRE BIBLIOTHÈQUE D’ENVIES
       </p>
+      <div class="sidebar-search">
+        <label for="search" data-i18n="searchBook">Rechercher un livre</label>
+        <form
+          class="searchbar"
+          id="search-form"
+          role="search"
+          aria-label="Rechercher dans le catalogue"
+          data-i18n-aria-label="searchCatalogue"
+        >
+          <input
+            id="search"
+            type="search"
+            aria-label="Rechercher un livre"
+            placeholder="Titre, auteur, ISBN…"
+            autocomplete="off"
+            maxlength="300"
+            aria-controls="books"
+            data-i18n-aria-label="searchBook"
+            data-i18n-placeholder="searchPlaceholder"
+          />
+          <button
+            id="search-clear"
+            type="button"
+            class="icon-btn"
+            aria-label="Effacer la recherche"
+            hidden
+            data-i18n-aria-label="clearSearch"
+          >
+            <span data-icon="x"></span>
+          </button>
+          <button
+            class="search-submit"
+            type="submit"
+            aria-label="Rechercher"
+            data-i18n-aria-label="search"
+          >
+            <span data-icon="search"></span>
+          </button>
+        </form>
+      </div>
       <div class="nav-label" data-i18n="takeYourTime">PRENEZ LE TEMPS</div>
       <nav
         aria-label="Navigation principale"
         data-i18n-aria-label="mainNavigation"
       >
-        <button data-nav="discover" class="nav-item">
-          <span data-icon="compass"></span
-          ><span data-i18n="discover">Découvrir</span
-          ><span data-icon="arrow" class="nav-arrow"></span></button
-        ><button data-nav="wishlist" class="nav-item active">
+        <button data-nav="wishlist" class="nav-item active">
           <span data-icon="library"></span
           ><span data-i18n="library">Ma bibliothèque</span
           ><span id="nav-count" class="count">0</span>
@@ -98,36 +134,31 @@
           aria-label="Ma bibliothèque"
           data-i18n-aria-label="library"
         >
-          <div class="collection-search">
-            <form class="searchbar" id="search-form">
-              <span data-icon="search"></span
-              ><input
-                id="search"
-                type="search"
-                aria-label="Rechercher un livre"
-                placeholder="Rechercher dans ma bibliothèque…"
-                autocomplete="off"
-                data-i18n-aria-label="searchBook"
-                data-i18n-placeholder="searchLibrary"
-              /><button
-                id="search-clear"
-                type="button"
-                class="icon-btn"
-                aria-label="Effacer la recherche"
-                hidden
-                data-i18n-aria-label="clearSearch"
-              >
-                <span data-icon="x"></span></button
-              ><button class="search-submit" type="submit">
-                <span data-i18n="search">Rechercher</span
-                ><span data-icon="arrow"></span>
-              </button>
-            </form>
+          <header class="collection-heading">
+            <div>
+              <h1 id="collection-title" data-i18n="library">Ma bibliothèque</h1>
+              <p id="search-query" class="search-query" hidden></p>
+            </div>
             <button class="secondary" id="manual-open">
               <span data-icon="plus"></span
               ><span data-i18n="addBook">Ajouter un livre</span>
             </button>
-          </div>
+          </header>
+          <label
+            class="library-filter"
+            id="library-filter"
+            for="library-search"
+          >
+            <span data-icon="search"></span>
+            <input
+              id="library-search"
+              type="search"
+              aria-label="Filtrer ma bibliothèque"
+              placeholder="Rechercher dans ma bibliothèque…"
+              data-i18n-aria-label="filterLibrary"
+              data-i18n-placeholder="searchLibrary"
+            />
+          </label>
           <div
             id="reading-filters"
             class="reading-filters"
@@ -215,8 +246,8 @@
             <div class="display-controls">
               <label for="sort" data-i18n="sortBy">Trier par</label
               ><select id="sort">
-                <option value="default" data-i18n="ourSelection">
-                  Notre sélection
+                <option value="default" data-i18n="recentlyAdded">
+                  Derniers ajouts
                 </option>
                 <option value="title" data-i18n="sortTitle">
                   Titre : A → Z
