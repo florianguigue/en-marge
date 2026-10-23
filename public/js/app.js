@@ -14,8 +14,9 @@ import {
   loadSettings,
   writeLanguage,
 } from "./api.js";
-import { parseBook, searchBooks } from "./open-library.js";
+import { searchBooks, loadBookMetadata, safeMetadataUrl } from "./metadata.js";
 import { READING_STATUSES, normalizeReadingStatus } from "./reading-status.js";
+import { normalizeIsbn } from "./isbn.js";
 import {
   LANGUAGE_STORAGE,
   initializeLanguage,
@@ -86,13 +87,15 @@ let state = {
   remote: null,
   remoteTotal: 0,
   remotePage: 1,
+  remoteHasMore: false,
+  remoteProvider: null,
   remoteLanguage: null,
   busy: false,
   notice: "",
 };
 let controller;
 let editionController;
-const descriptions = new Map();
+const metadataDetails = new Map();
 let detailId = null;
 let toastTimer;
 let currentToast;
@@ -144,8 +147,11 @@ function findSaved(b) {
   return saved.find(
     (s) =>
       s.id === b.id ||
-      (s.isbn && b.isbn && s.isbn === b.isbn) ||
-      (normal(s.title) === normal(b.title) &&
+      (normalizeIsbn(s.isbn) &&
+        normalizeIsbn(s.isbn) === normalizeIsbn(b.isbn)) ||
+      (s.manual &&
+        b.manual &&
+        normal(s.title) === normal(b.title) &&
         normal(s.author) === normal(b.author)),
   );
 }
@@ -210,7 +216,9 @@ function find(id) {
     saved.find((b) => b.id === id) ||
     state.remote?.find((b) => b.id === id) ||
     catalogue.find((b) => b.id === id);
-  return book ? localizeBook(book, getLanguage()) : undefined;
+  if (!book) return undefined;
+  const localized = localizeBook(book, getLanguage());
+  return { ...localized, ...metadataDetails.get(`${id}:${getLanguage()}`) };
 }
 function bookName(book) {
   return !book.title || ["Sans titre", "Untitled"].includes(book.title)
@@ -224,11 +232,13 @@ function bookAuthor(book) {
     : book.author;
 }
 function cover(b) {
-  const src = b.coverId
-    ? `https://covers.openlibrary.org/b/id/${encodeURIComponent(b.coverId)}-M.jpg?default=false`
-    : b.isbn
-      ? `https://covers.openlibrary.org/b/isbn/${encodeURIComponent(b.isbn)}-M.jpg?default=false`
-      : "";
+  const src =
+    safeMetadataUrl(b.coverUrl) ||
+    (!b.provider && b.coverId
+      ? `https://covers.openlibrary.org/b/id/${encodeURIComponent(b.coverId)}-M.jpg?default=false`
+      : !b.provider && b.isbn
+        ? `https://covers.openlibrary.org/b/isbn/${encodeURIComponent(b.isbn)}-M.jpg?default=false`
+        : "");
   return `<div class="cover-placeholder" ${src ? "hidden" : ""} style="--book-color:${/^#[0-9a-f]{6}$/i.test(b.color) ? b.color : "#557260"}">
     <small>${esc(bookAuthor(b))}</small><span>${esc(bookName(b))}</span><span class="ornament">✳</span>
   </div>${src ? `<img class="book-cover" src="${src}" alt="${esc(t("coverAlt", { title: bookName(b) }))}" loading="lazy">` : ""}`;
@@ -382,10 +392,7 @@ function render() {
         <button class="primary" id="empty-action">${t(emptyLibrary ? "discoverBooks" : "resetFilters")} ${icon("arrow")}</button>
       </div>`;
   $("#load-more").hidden =
-    wish ||
-    !state.remote ||
-    state.remote.length >= state.remoteTotal ||
-    state.busy;
+    wish || !state.remote || !state.remoteHasMore || state.busy;
   $("#search-form button[type=submit]").disabled = state.busy;
   bindImageFallback();
 }
@@ -472,17 +479,19 @@ function openDialog(id) {
   $(id).showModal();
 }
 function sourceUrl(b) {
+  if (safeMetadataUrl(b.sourceUrl)) return safeMetadataUrl(b.sourceUrl);
   if (/^\/books\/OL\d+M$/.test(b.editionKey))
     return `https://openlibrary.org${b.editionKey}`;
   if (b.workKey && /^\/?works\/OL\d+W$/.test(b.workKey))
     return `https://openlibrary.org/${b.workKey.replace(/^\//, "")}`;
-  return b.isbn
-    ? `https://openlibrary.org/isbn/${encodeURIComponent(b.isbn)}`
-    : "";
+  return "";
 }
 function showDetail(id, open = true) {
-  const b = find(id);
+  let b = find(id);
   if (!b) return;
+  const details = metadataDetails.get(`${id}:${getLanguage()}`);
+  if (details)
+    b = { ...b, ...details, id: b.id, status: b.status, tags: b.tags };
   detailId = id;
   const added = isSaved(b);
   const url = sourceUrl(b);
@@ -500,6 +509,7 @@ function showDetail(id, open = true) {
         <div><dt>${t("publisher")}</dt><dd>${esc(b.publisher || t("notProvided"))}</dd></div>
       </dl>
       <h3>${t("aboutBook")}</h3><p class="description" id="detail-description">${esc(b.description || t("noSummary"))}</p>
+      ${b.series?.length ? `<h3>${t("series")}</h3><p>${b.series.map((series) => `${esc(series.name)}${series.position != null ? ` · ${esc(series.position)}` : ""}`).join("<br>")}</p>` : ""}
       ${
         added
           ? `${readingStatusControl(localizeBook(findSaved(b), getLanguage()))}
@@ -511,41 +521,59 @@ function showDetail(id, open = true) {
         <button class="primary" data-save="${esc(b.id)}">${icon(added ? "check" : "plus")}${t(added ? "removeFromLibrary" : "addToLibrary")}</button>
         ${b.manual ? `<button class="secondary" id="edit-manual">${t("edit")}</button>` : ""}
       </div>
-      ${url ? `<a class="detail-source" href="${esc(url)}" target="_blank" rel="noopener noreferrer">${t("openLibraryReference")}</a>` : `<span class="detail-source">${t("manualMetadata")}</span>`}
+      ${url ? `<a class="detail-source" href="${esc(url)}" target="_blank" rel="noopener noreferrer">${t("metadataReference")}</a>` : `<span class="detail-source">${t(b.manual ? "manualMetadata" : "notProvided")}</span>`}
+      ${b.sources?.length ? `<span class="detail-source">${t("metadataSources")} ${b.sources.map((source) => esc(source.provider)).join(", ")}</span>` : ""}
+      ${safeMetadataUrl(b.imageCredits?.url) ? `<a class="detail-source" href="${esc(safeMetadataUrl(b.imageCredits.url))}" target="_blank" rel="noopener noreferrer">${esc(b.imageCredits.text || t("imageCredit"))}</a>` : ""}
       ${b.manual ? "" : `<span class="detail-source">${t("editionPagesVary")}</span>`}
     </div>
   </div>`;
   bindImageFallback($("#book-dialog"));
   if (open) openDialog("#book-dialog");
-  if (b.editionKey && !b.description) loadDescription(b);
+  if (!b.manual && !details) loadDetails(b);
 }
-async function loadDescription(b) {
+async function loadDetails(b) {
   const language = getLanguage();
-  const key = b.editionKey;
-  if (!/^\/books\/OL\d+M$/.test(key)) return;
+  const key = `${b.id}:${language}`;
   try {
-    if (!descriptions.has(key)) {
-      const response = await fetch(`https://openlibrary.org${key}.json`, {
-        signal: AbortSignal.timeout(9000),
-      });
-      if (!response.ok) return;
-      const data = await response.json();
-      const description =
-        typeof data.description === "string"
-          ? data.description
-          : data.description?.value;
-      descriptions.set(key, typeof description === "string" ? description : "");
-    }
-    const text = descriptions.get(key);
+    const data = await loadBookMetadata(
+      b,
+      language,
+      AbortSignal.timeout(12000),
+    );
+    // An existing edition remains authoritative when an ISBN lookup resolves a new provider.
+    const details = data?.book;
+    if (!details) return;
+    const sameEdition =
+      (b.editionId && b.editionId === details.editionId) ||
+      (normalizeIsbn(b.isbn) &&
+        normalizeIsbn(b.isbn) === normalizeIsbn(details.isbn));
+    metadataDetails.set(key, {
+      description: details.description || b.description,
+      series: details.series,
+      sources: details.sources,
+      provenance: details.provenance,
+      externalIds: { ...b.externalIds, ...details.externalIds },
+      ...(sameEdition
+        ? {
+            pages: b.pages || details.pages,
+            publisher: b.publisher || details.publisher,
+            year: b.year || details.year,
+            coverUrl: b.coverUrl || details.coverUrl,
+            imageCredits: b.coverUrl ? b.imageCredits : details.imageCredits,
+            author:
+              !b.author ||
+              ["Auteur non renseigné", "Unknown author"].includes(b.author)
+                ? details.author
+                : b.author,
+          }
+        : {}),
+    });
     if (
-      text &&
       getLanguage() === language &&
       detailId === b.id &&
-      $("#book-dialog").open &&
-      find(b.id)?.editionKey === key
-    ) {
-      $("#detail-description").textContent = text;
-    }
+      $("#book-dialog").open
+    )
+      refreshOpenDetail();
   } catch {}
 }
 async function search(more = false) {
@@ -577,6 +605,8 @@ async function search(more = false) {
     state.remote = [];
     state.remoteTotal = 0;
     state.remotePage = 1;
+    state.remoteProvider = null;
+    state.remoteHasMore = false;
   } else state.remotePage++;
   render();
   const timer = setTimeout(() => currentController.abort("timeout"), 15000);
@@ -586,16 +616,18 @@ async function search(more = false) {
       state.remotePage,
       currentController.signal,
       getLanguage(),
+      more ? state.remoteProvider : undefined,
     );
     if (controller !== currentController) return;
-    const books = data.docs.map((document) =>
-      parseBook(document, state.remoteLanguage),
-    );
+    const books = data.books;
     state.remote = more
       ? [...new Map([...state.remote, ...books].map((b) => [b.id, b])).values()]
       : books;
-    state.remoteTotal = data.numFound ?? data.num_found ?? books.length;
+    state.remoteTotal = data.total ?? books.length;
+    state.remoteHasMore = Boolean(data.hasMore);
+    state.remoteProvider = data.provider;
     if (!books.length && !more) state.notice = "noResults";
+    else if (data.warnings?.length) state.notice = "partialSearch";
   } catch (error) {
     if (controller !== currentController) return;
     if (more) {
@@ -614,6 +646,7 @@ async function search(more = false) {
         ).includes(normal(q)),
       );
       state.remoteTotal = state.remote.length;
+      state.remoteHasMore = false;
       state.notice = "searchUnavailable";
     }
   } finally {

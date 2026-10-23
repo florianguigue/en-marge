@@ -76,60 +76,59 @@ test("fantasy titles, summaries and covers follow the selected language in Disco
   );
 });
 
-const document = {
-  key: "/works/OL900099W",
-  title: "Le Livre des brumes",
-  cover_i: 1,
-  isbn: ["9780000000000"],
-  author_name: ["An Author"],
-  editions: {
-    docs: [
-      {
-        key: "/books/OL900099M",
-        title: "Le Livre des brumes",
-        language: ["fre"],
-        cover_i: 11,
-        isbn: ["9780000000001"],
-      },
-      {
-        key: "/books/OL900098M",
-        title: "The Book of Mists",
-        language: ["eng"],
-        cover_i: 22,
-        isbn: ["9780000000002"],
-      },
-    ],
-  },
-};
+const edition = (language) => ({
+  id: "hardcover:900099",
+  provider: "hardcover",
+  externalId: "900099",
+  title: language === "en" ? "The Book of Mists" : "Le Livre des brumes",
+  author: "An Author",
+  language,
+  tags: [],
+  isbn: language === "en" ? "9780547928227" : "9782070612888",
+  coverUrl: `https://example.org/${language}.jpg`,
+  sourceUrl: "https://hardcover.app/books/mists",
+  description:
+    language === "en"
+      ? "An English summary for the English edition."
+      : "Un résumé en français.",
+});
 
 test("search and saved works use matching editions, retaining status and tags across languages", async ({
   page,
 }) => {
   const requests = [];
-  await page.route("https://openlibrary.org/search.json?*", (route) => {
-    requests.push(new URL(route.request().url()));
-    return route.fulfill({ json: { docs: [document], numFound: 1 } });
+  await page.route("**/api/catalogue/search?*", (route) => {
+    const url = new URL(route.request().url());
+    requests.push(url);
+    return route.fulfill({
+      json: {
+        books: [edition(url.searchParams.get("language"))],
+        total: 1,
+        hasMore: false,
+        provider: "hardcover",
+      },
+    });
   });
-  await page.route("https://openlibrary.org/books/OL900098M.json", (route) =>
-    route.fulfill({
-      json: { description: "An English summary for the English edition." },
-    }),
-  );
-  await page.route("https://openlibrary.org/books/OL900099M.json", (route) =>
-    route.fulfill({ json: { description: "Un résumé en français." } }),
-  );
+  await page.route("**/api/catalogue/book?*", (route) => {
+    const url = new URL(route.request().url());
+    requests.push(url);
+    const book = edition(url.searchParams.get("language"));
+    return route.fulfill({
+      json: { book: { ...book, editions: [edition("fr"), edition("en")] } },
+    });
+  });
   await page.goto("/#discover");
   await page.locator("#language-select").selectOption("en");
   await page.locator("#search").fill("Mists");
   await page.locator("#search-form").evaluate((form) => form.requestSubmit());
   await expect(page.locator(".book-title")).toHaveText("The Book of Mists");
   expect(requests[0].searchParams.get("q")).toBe("Mists");
-  expect(requests[0].searchParams.get("lang")).toBe("en");
+  expect(requests[0].searchParams.get("language")).toBe("en");
   await page.locator(".book-title").click();
   await expect(page.locator("#detail-description")).toContainText(
     "An English summary",
   );
-  await expect(page.locator(".detail-facts")).toContainText("9780000000002");
+  await expect(page.locator(".detail-facts")).toContainText("9780547928227");
   await page.locator("#book-dialog .close-dialog").click();
   await page.locator(".save-book").click();
   await page.locator('[data-nav="wishlist"]').click();
@@ -145,8 +144,10 @@ test("search and saved works use matching editions, retaining status and tags ac
     "read",
   );
   expect(
-    requests.some((request) =>
-      request.searchParams.get("q").includes("language:fre"),
+    requests.some(
+      (request) =>
+        request.pathname === "/api/catalogue/book" &&
+        request.searchParams.get("language") === "fr",
     ),
   ).toBe(true);
   await page.locator(".book-title").click();
@@ -169,17 +170,28 @@ test("switching language replaces an in-flight search with the new edition langu
   const pending = new Promise((resolve) => {
     release = resolve;
   });
-  await page.route("https://openlibrary.org/search.json?*", async (route) => {
-    if (new URL(route.request().url()).searchParams.get("lang") === "en")
+  await page.route("**/api/catalogue/search?*", async (route) => {
+    if (new URL(route.request().url()).searchParams.get("language") === "en")
       await pending;
     await route
-      .fulfill({ json: { docs: [document], numFound: 1 } })
+      .fulfill({
+        json: {
+          books: [
+            edition(
+              new URL(route.request().url()).searchParams.get("language"),
+            ),
+          ],
+          total: 1,
+          hasMore: false,
+          provider: "hardcover",
+        },
+      })
       .catch(() => {});
   });
   await page.goto("/#discover");
   await page.locator("#language-select").selectOption("en");
   await page.locator("#search").fill("Mists");
-  const started = page.waitForRequest("https://openlibrary.org/search.json?*");
+  const started = page.waitForRequest("**/api/catalogue/search?*");
   await page.locator("#search-form").evaluate((form) => form.requestSubmit());
   await started;
   await page.locator("#language-select").selectOption("fr");

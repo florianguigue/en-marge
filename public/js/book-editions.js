@@ -1,5 +1,5 @@
 import { catalogue } from "./catalogue.js";
-import { editionFor, parseBook, searchBookEditions } from "./open-library.js";
+import { loadBookMetadata } from "./metadata.js";
 
 const editions = new Map();
 const cacheKey = (workKey, language) => `${workKey}:${language}`;
@@ -17,6 +17,33 @@ function variantFor(book, language) {
   );
 }
 
+const editionMetadata = (book) =>
+  Object.fromEntries(
+    [
+      "title",
+      "description",
+      "editionKey",
+      "editionId",
+      "isbn",
+      "isbns",
+      "coverId",
+      "coverUrl",
+      "pages",
+      "publisher",
+      "year",
+      "publishedDate",
+      "format",
+      "language",
+      "provider",
+      "externalId",
+      "externalIds",
+      "sourceUrl",
+      "sources",
+      "provenance",
+      "imageCredits",
+    ].map((key) => [key, book[key]]),
+  );
+
 export function localizeBook(book, language) {
   if (book.manual) return book;
   const variant = variantFor(book, language);
@@ -25,23 +52,17 @@ export function localizeBook(book, language) {
     return { ...book, description: "", originalEdition: true };
   }
   // Only edition metadata changes. Identity, reading status and personal tags stay intact.
-  const { title, description, editionKey, isbn, coverId, pages, publisher } =
-    variant;
   return {
     ...book,
-    title,
-    description: description || "",
-    editionKey,
-    isbn,
-    coverId,
-    pages,
-    publisher,
+    ...editionMetadata(variant),
+    description: variant.description || "",
     language,
     id: book.id,
     workKey: book.workKey,
     status: book.status,
     tags: book.tags,
     translations: {
+      ...(book.language ? { [book.language]: editionMetadata(book) } : {}),
       ...book.translations,
       ...catalogueBook(book)?.translations,
       [language]: variant,
@@ -55,32 +76,31 @@ export function getCatalogue(language) {
 }
 
 export async function loadBookEditions(books, language, signal) {
-  const workKeys = [
-    ...new Set(
-      books
-        .filter(
-          (book) =>
-            !book.manual &&
-            book.language !== language &&
-            !variantFor(book, language) &&
-            !editions.has(cacheKey(workKeyFor(book), language)),
-        )
-        .map(workKeyFor)
-        .filter((key) => /^\/works\/OL\d+W$/.test(key)),
-    ),
-  ];
-  for (let offset = 0; offset < workKeys.length; offset += 20) {
-    const keys = workKeys.slice(offset, offset + 20);
-    const data = await searchBookEditions(keys, language, signal);
-    for (const key of keys) {
-      const document = data.docs.find(
-        (item) => item.key === key && editionFor(item, language),
-      );
-      editions.set(
-        cacheKey(key, language),
-        document ? parseBook(document, language).translations[language] : null,
-      );
+  const candidates = books.filter(
+    (book) =>
+      !book.manual &&
+      (book.provider || book.isbn) &&
+      book.language !== language &&
+      !variantFor(book, language) &&
+      !editions.has(cacheKey(workKeyFor(book), language)),
+  );
+  let changed = false;
+  // Resolve explicit work/edition relationships; never guess translations from a title.
+  for (const book of candidates) {
+    signal?.throwIfAborted();
+    try {
+      const data = await loadBookMetadata(book, language, signal);
+      const variant =
+        data?.book?.editions?.find(
+          (edition) => edition.language === language,
+        ) || (data?.book?.language === language ? data.book : null);
+      if (variant) {
+        editions.set(cacheKey(workKeyFor(book), language), variant);
+        changed = true;
+      }
+    } catch (error) {
+      if (signal?.aborted) throw error;
     }
   }
-  return workKeys.length > 0;
+  return changed;
 }

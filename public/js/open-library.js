@@ -1,74 +1,11 @@
 import { normal } from "./utils.js";
 import { getLanguage, t } from "./i18n.js";
 
-const fields = [
-  "key",
-  "title",
-  "author_name",
-  "cover_i",
-  "isbn",
-  "number_of_pages_median",
-  "first_publish_year",
-  "subject",
-  "publisher",
-  "editions",
-  "editions.key",
-  "editions.title",
-  "editions.language",
-  "editions.cover_i",
-  "editions.isbn",
-  "editions.publisher",
-  "editions.number_of_pages",
-].join(",");
-
+// Compatibility parser for historical Open Library fixtures. No network requests.
 export function editionFor(document, language = getLanguage()) {
   const code = language === "en" ? "eng" : "fre";
   return document.editions?.docs?.find((edition) =>
     edition.language?.includes(code),
-  );
-}
-
-async function requestBooks(
-  query,
-  page,
-  limit,
-  signal,
-  language,
-  strictLanguage = false,
-) {
-  const code = language === "en" ? "eng" : "fre";
-  const params = new URLSearchParams({
-    q: strictLanguage ? `(${query}) language:${code}` : query,
-    lang: language,
-    limit: String(limit),
-    page: String(page),
-    fields,
-  });
-  const response = await fetch(
-    `https://openlibrary.org/search.json?${params}`,
-    { signal },
-  );
-  if (!response.ok) throw new Error("Open Library is unavailable.");
-  const data = await response.json();
-  if (!Array.isArray(data.docs))
-    throw new Error("Invalid Open Library response.");
-  return data;
-}
-
-export function searchBooks(query, page, signal, language = getLanguage()) {
-  return requestBooks(query, page, 24, signal, language);
-}
-
-export function searchBookEditions(workKeys, language, signal) {
-  const keys = workKeys.filter((key) => /^\/works\/OL\d+W$/.test(key));
-  if (!keys.length) return Promise.resolve({ docs: [] });
-  return requestBooks(
-    keys.map((key) => `key:${key}`).join(" OR "),
-    1,
-    keys.length,
-    signal,
-    language,
-    true,
   );
 }
 

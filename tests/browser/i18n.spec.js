@@ -166,18 +166,16 @@ test.describe("English interface", () => {
   }) => {
     await page.goto("/#discover");
     await page.locator("#search").fill("Tolkien");
-    const requestPromise = page.waitForRequest(
-      "https://openlibrary.org/search.json?*",
-    );
+    const requestPromise = page.waitForRequest("**/api/catalogue/search?*");
     await page.locator("#search-form").evaluate((form) => form.requestSubmit());
     const request = await requestPromise;
-    expect(new URL(request.url()).searchParams.get("lang")).toBe("en");
+    expect(new URL(request.url()).searchParams.get("language")).toBe("en");
     await expect(page.locator("#search-notice")).toContainText(
-      "Open Library is unavailable",
+      "The catalogue is unavailable",
     );
     await page.locator("#language-select").selectOption("fr");
     await expect(page.locator("#search-notice")).toContainText(
-      "Open Library est indisponible",
+      "Le catalogue est indisponible",
     );
     await expect(page.locator("#search")).toHaveValue("Tolkien");
     await expect(page.locator(".book-card")).toHaveCount(1);

@@ -34,21 +34,20 @@ L'objectif est de disposer d'un catalogue riche, fiable et agréable à consulte
 
 ## 3. Sources de données
 
-Le système reposera sur trois fournisseurs de métadonnées bibliographiques.
+Le système reposera sur deux fournisseurs de métadonnées bibliographiques.
 
-| Fournisseur | Rôle principal | Priorité |
-|---|---|---|
-| Google Books | Recherche, couvertures, résumés, ISBN, éditions | Principal |
-| Hardcover | Sagas, tomes, ordre de lecture, relations entre œuvres | Secondaire |
-| Inventaire.io | Enrichissement bibliographique, œuvres, éditions et séries | Complémentaire |
+| Fournisseur  | Rôle principal                                                    | Priorité  |
+| ------------ | ----------------------------------------------------------------- | --------- |
+| Hardcover    | Recherche, œuvres, éditions, sagas, tomes et ordre de lecture     | Principal |
+| Google Books | Recherche, couvertures, résumés, ISBN et éditions en cas de repli | Repli     |
 
 ### Stratégie d'utilisation
 
-1. Interroger Google Books pour la recherche initiale.
+1. Interroger Hardcover pour la recherche initiale par titre, auteur ou ISBN.
 2. Normaliser les résultats dans un modèle commun.
-3. Rechercher des correspondances dans Hardcover et Inventaire.io selon les besoins.
-4. Enrichir les fiches avec les données complémentaires disponibles.
-5. Détecter les doublons et fusionner les métadonnées.
+3. Interroger Google Books uniquement si Hardcover est indisponible, désactivé ou ne renvoie aucun résultat.
+4. Enrichir les fiches avec les données complémentaires disponibles lorsque nécessaire.
+5. Détecter les doublons et fusionner les métadonnées sur correspondance fiable.
 6. Conserver la provenance des informations.
 7. Mettre en cache les données afin de limiter les appels externes.
 
@@ -76,12 +75,13 @@ L'application sera constituée de composants indépendants.
                    v
         Agrégateur de métadonnées
                    |
-       +-----------+-----------+
-       |           |           |
-       v           v           v
- Google Books  Hardcover  Inventaire.io
-       |           |           |
-       +-----------+-----------+
+           +-------+-------+
+           |               |
+           v               v
+       Hardcover      Google Books
+       (principal)       (repli)
+           |               |
+           +-------+-------+
                    |
           Normalisation / Fusion
                    |
@@ -296,7 +296,7 @@ Une saga pourra présenter :
 
 ## 8. Suivi des prochaines sorties
 
-Les dates de sortie devront être récupérées et vérifiées auprès des sources disponibles parmi les trois fournisseurs retenus : Google Books, Hardcover et Inventaire.io. Les catalogues des éditeurs ainsi que les annonces officielles des auteurs ou maisons d'édition pourront compléter cette veille lorsqu'une date doit être confirmée.
+Les dates de sortie devront être récupérées et vérifiées auprès des sources disponibles parmi les deux fournisseurs retenus : Hardcover et Google Books. Les catalogues des éditeurs ainsi que les annonces officielles des auteurs ou maisons d'édition pourront compléter cette veille lorsqu'une date doit être confirmée.
 
 Le système devra distinguer :
 
@@ -314,7 +314,7 @@ Le système devra distinguer :
 
 **Objectif : proposer une recherche fonctionnelle et des fiches bibliographiques de qualité.**
 
-- Intégration de Google Books.
+- Intégration de Hardcover comme moteur de recherche principal.
 - Recherche par titre, auteur et ISBN.
 - Affichage des couvertures.
 - Affichage des résumés.
@@ -328,7 +328,7 @@ Le système devra distinguer :
 
 **Objectif : enrichir les fiches et améliorer la qualité du catalogue.**
 
-- Intégration d'Inventaire.io.
+- Intégration de Google Books comme fournisseur de repli.
 - Intégration de Hardcover pour les données de séries et les relations entre œuvres disponibles.
 - Enrichissement des métadonnées.
 - Stratégie de fusion.
@@ -340,7 +340,7 @@ Le système devra distinguer :
 
 **Objectif : ajouter une navigation structurée par série.**
 
-- Exploitation des données de séries de Hardcover et, lorsque disponibles, d'Inventaire.io.
+- Exploitation des données de séries de Hardcover.
 - Identification des sagas.
 - Fiches saga.
 - Liste ordonnée des tomes.
@@ -382,10 +382,10 @@ Le projet respectera les principes suivants :
 
 - Priorité au catalogue de livres.
 - Suivi des sagas comme deuxième objectif.
-- Approche multi-API limitée à trois fournisseurs pour cette première étape.
-- Google Books comme fournisseur principal.
+- Approche multi-API limitée à deux fournisseurs pour cette première étape.
+- Hardcover comme fournisseur principal de recherche.
 - Hardcover pour les sagas.
-- Inventaire.io comme source complémentaire.
+- Google Books comme fournisseur de repli.
 - Modèle métier indépendant des fournisseurs.
 - Distinction entre œuvres et éditions.
 - Traçabilité des métadonnées.
@@ -412,8 +412,18 @@ Le projet respectera les principes suivants :
 
 ## 12. Vision cible
 
-Construire progressivement une application auto-hébergeable proposant un **catalogue de livres riche et consolidé**, capable de réunir des informations provenant de Google Books, Hardcover et Inventaire.io.
+Construire progressivement une application auto-hébergeable proposant un **catalogue de livres riche et consolidé**, capable de réunir des informations provenant de Hardcover et Google Books.
 
 À terme, l'application doit permettre de découvrir un livre, consulter ses différentes éditions, retrouver sa saga, connaître l'ordre de lecture et être informé de ses prochaines publications.
 
 Le catalogue constitue le socle du projet ; le suivi des sagas et des parutions vient enrichir cette base sans remettre en cause son architecture.
+
+## 13. Mise en œuvre dans En marge
+
+Le remplacement des appels Open Library par l’API catalogue Hardcover /
+Google Books est mis en place sur la stack Bun et SQLite existante.
+L’[analyse de migration](docs/migration-catalogue.md) décrit le périmètre réalisé,
+les décisions d’intégration, les limites et les étapes restant à développer. Le
+[README](README.md#fournisseurs-de-métadonnées) documente la configuration des
+fournisseurs et les nouvelles routes. Les écrans de sagas, les parutions et les
+notifications restent des étapes distinctes de la roadmap.

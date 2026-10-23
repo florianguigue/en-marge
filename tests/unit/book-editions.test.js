@@ -6,11 +6,8 @@ import {
   localizeBook,
   loadBookEditions,
 } from "../../public/js/book-editions.js";
-import {
-  parseBook,
-  searchBooks,
-  searchBookEditions,
-} from "../../public/js/open-library.js";
+import { parseBook } from "../../public/js/open-library.js";
+import { searchBooks, loadBookMetadata } from "../../public/js/metadata.js";
 
 test("the fantasy selection has English titles, summaries and verified edition references", () => {
   const english = getCatalogue("en");
@@ -90,71 +87,128 @@ test("search reads the matching edition title, cover and ISBN instead of the wor
   expect(parseBook(doc, "fr").title).toBe("Titre français");
 });
 
-test("search prefers the interface language without excluding incompletely catalogued books", async () => {
+test("search passes query, page and language to the unified server API", async () => {
   const calls = [];
   const fetchSpy = spyOn(globalThis, "fetch").mockImplementation(
     async (url) => {
-      calls.push(new URL(url));
-      return Response.json({ docs: [] });
+      calls.push(new URL(url, "http://localhost"));
+      return Response.json({ books: [], total: 0, hasMore: false });
     },
   );
   try {
-    await searchBooks("Hobbit", 1, undefined, "en");
-    await searchBooks("Hobbit", 1, undefined, "fr");
+    await searchBooks("Hobbit", 2, undefined, "en", "google-books");
+    expect(calls[0].pathname).toBe("/api/catalogue/search");
     expect(calls[0].searchParams.get("q")).toBe("Hobbit");
-    expect(calls[1].searchParams.get("q")).toBe("Hobbit");
-    expect(calls[0].searchParams.get("lang")).toBe("en");
-    expect(calls[1].searchParams.get("lang")).toBe("fr");
-    await searchBookEditions(["/works/OL900003W"], "en");
-    expect(calls[2].searchParams.get("q")).toContain("language:eng");
-    expect(calls[0].searchParams.get("fields")).toContain("editions.title");
+    expect(calls[0].searchParams.get("page")).toBe("2");
+    expect(calls[0].searchParams.get("language")).toBe("en");
+    expect(calls[0].searchParams.get("provider")).toBe("google-books");
   } finally {
     fetchSpy.mockRestore();
   }
 });
 
-test("other saved works resolve translated editions without rewriting saved records", async () => {
+test("explicit related editions change display without rewriting saved records", async () => {
   const saved = {
-    id: "/works/OL900003W",
-    workKey: "/works/OL900003W",
+    id: "hardcover:900003",
+    provider: "hardcover",
+    externalId: "900003",
     title: "Titre français",
     author: "Auteur",
     language: "fr",
     tags: ["Favori"],
     status: "read",
   };
-  const fetchSpy = spyOn(globalThis, "fetch").mockResolvedValue(
-    Response.json({
-      docs: [
-        {
-          key: saved.id,
-          title: "Titre français",
-          author_name: ["Auteur"],
-          editions: {
-            docs: [
-              {
-                key: "/books/OL900003M",
-                title: "English title",
-                language: ["eng"],
-                cover_i: 7,
-                isbn: ["9780000000003"],
-              },
-            ],
+  let calls = 0;
+  const fetchSpy = spyOn(globalThis, "fetch").mockImplementation(async () => {
+    calls++;
+    return Response.json({
+      book: {
+        ...saved,
+        editions: [
+          {
+            id: "hardcover:900003:edition:1",
+            provider: "hardcover",
+            externalId: "900003",
+            title: "English title",
+            language: "en",
+            author: "Auteur",
+            coverUrl: "https://example.org/cover.jpg",
+            isbn: "9780547928227",
           },
-        },
-      ],
-    }),
-  );
+        ],
+      },
+    });
+  });
   try {
     const before = JSON.stringify(saved);
     expect(await loadBookEditions([saved], "en")).toBe(true);
     expect(localizeBook(saved, "en")).toMatchObject({
       title: "English title",
+      coverUrl: "https://example.org/cover.jpg",
       status: "read",
       tags: ["Favori"],
+      id: saved.id,
     });
     expect(await loadBookEditions([saved], "en")).toBe(false);
+    expect(calls).toBe(1);
     expect(JSON.stringify(saved)).toBe(before);
+    expect(localizeBook(localizeBook(saved, "en"), "fr").title).toBe(
+      "Titre français",
+    );
+  } finally {
+    fetchSpy.mockRestore();
+  }
+});
+
+test("a failed edition lookup is retryable and never guesses a translation", async () => {
+  const saved = {
+    id: "google-books:retry",
+    provider: "google-books",
+    externalId: "retry",
+    title: "Untranslated",
+    author: "Author",
+    language: null,
+  };
+  const fetchSpy = spyOn(globalThis, "fetch")
+    .mockRejectedValueOnce(new Error("offline"))
+    .mockResolvedValue(Response.json({ book: { ...saved, language: "en" } }));
+  try {
+    expect(await loadBookEditions([saved], "en")).toBe(false);
+    expect(localizeBook(saved, "en").title).toBe("Untranslated");
+    expect(await loadBookEditions([saved], "en")).toBe(true);
+  } finally {
+    fetchSpy.mockRestore();
+  }
+});
+
+test("an unavailable saved provider falls back to the common ISBN lookup", async () => {
+  const book = {
+    id: "google-books:unavailable",
+    provider: "google-books",
+    externalId: "unavailable",
+    isbn: "9780547928227",
+  };
+  const urls = [];
+  const fetchSpy = spyOn(globalThis, "fetch").mockImplementation(
+    async (url) => {
+      urls.push(url);
+      return urls.length === 1
+        ? new Response("Unavailable", { status: 503 })
+        : Response.json({
+            book: {
+              id: "hardcover:1",
+              title: "The Hobbit",
+              author: "Tolkien",
+              language: "en",
+              isbn: book.isbn,
+            },
+          });
+    },
+  );
+  try {
+    expect((await loadBookMetadata(book, "en")).book.title).toBe("The Hobbit");
+    expect(urls[0]).toContain("/api/catalogue/book?");
+    expect(urls[1]).toContain("/api/catalogue/isbn?");
   } finally {
     fetchSpy.mockRestore();
   }

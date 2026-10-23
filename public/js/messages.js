@@ -75,7 +75,7 @@ export const messages = {
     aboutStorageText:
       "Votre bibliothèque est enregistrée dans une base de données sur le serveur. Elle est partagée entre les appareils qui accèdent à cette instance. Effacer les données du navigateur ne supprime pas les livres.",
     aboutMetadata:
-      "Seules les métadonnées sont conservées : aucun livre numérique n’est hébergé. La recherche et les couvertures proviennent d’Open Library. Les données manquantes sont signalées.",
+      "Seules les métadonnées sont conservées : aucun livre numérique n’est hébergé. Les métadonnées sont fournies par Hardcover et Google Books selon leur disponibilité. Les données manquantes sont signalées.",
     export: "Exporter ma liste (JSON)",
     storageFailed:
       "Le serveur ne permet pas l’enregistrement. Votre liste n’a pas été modifiée. Réessayez.",
@@ -133,15 +133,20 @@ export const messages = {
     saveTags: "Enregistrer les tags",
     removeFromLibrary: "Retirer de ma bibliothèque",
     edit: "Modifier",
-    openLibraryReference: "Voir la référence sur Open Library ↗",
+    metadataReference: "Voir la référence bibliographique ↗",
+    metadataSources: "Sources :",
+    series: "Saga",
+    imageCredit: "Crédit de la couverture",
+    partialSearch:
+      "Certains fournisseurs sont indisponibles. Les résultats disponibles restent affichés.",
     manualMetadata: "Métadonnées ajoutées manuellement.",
     editionPagesVary: "Le nombre de pages peut varier selon l’édition.",
     noResults:
-      "Aucun résultat dans Open Library. Essayez un titre dans sa langue originale, un auteur ou un ISBN.",
+      "Aucun résultat dans le catalogue. Essayez un titre dans sa langue originale, un auteur ou un ISBN.",
     nextResultsUnavailable:
       "Les résultats suivants ne sont pas disponibles pour le moment. Vous pouvez réessayer.",
     searchUnavailable:
-      "Open Library est indisponible ou trop lent. Seule notre sélection locale est affichée. Vous pouvez réessayer ou ajouter une fiche manuellement.",
+      "Le catalogue est indisponible ou trop lent. Seule notre sélection locale est affichée. Vous pouvez réessayer ou ajouter une fiche manuellement.",
     editBook: "Modifier le livre",
     saveChanges: "Enregistrer les modifications",
     tagsSaved: "Vos tags ont été enregistrés.",
@@ -238,7 +243,7 @@ export const messages = {
     aboutStorageText:
       "Your library is saved in a database on the server and shared by devices accessing this instance. Clearing browser data does not delete your books.",
     aboutMetadata:
-      "Only book metadata is saved; no ebooks are hosted. Search results and covers come from Open Library. Missing information is identified.",
+      "Only book metadata is saved; no ebooks are hosted. Metadata is provided by Hardcover and Google Books when available. Missing information is identified.",
     export: "Export my library (JSON)",
     storageFailed:
       "The server could not save your changes. Your library has not been changed. Please try again.",
@@ -297,15 +302,20 @@ export const messages = {
     saveTags: "Save tags",
     removeFromLibrary: "Remove from my library",
     edit: "Edit",
-    openLibraryReference: "View on Open Library ↗",
+    metadataReference: "View book reference ↗",
+    metadataSources: "Sources:",
+    series: "Series",
+    imageCredit: "Cover credit",
+    partialSearch:
+      "Some providers are unavailable. Available results are still displayed.",
     manualMetadata: "Book details added manually.",
     editionPagesVary: "Page counts may vary by edition.",
     noResults:
-      "No results from Open Library. Try a title in its original language, an author or an ISBN.",
+      "No results in the catalogue. Try a title in its original language, an author or an ISBN.",
     nextResultsUnavailable:
       "More results are temporarily unavailable. Please try again.",
     searchUnavailable:
-      "Open Library is unavailable or responding too slowly. Only our local selection is shown. You can try again or add a book manually.",
+      "The catalogue is unavailable or responding too slowly. Only our local selection is shown. You can try again or add a book manually.",
     editBook: "Edit book",
     saveChanges: "Save changes",
     tagsSaved: "Your tags have been saved.",

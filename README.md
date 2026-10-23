@@ -1,6 +1,6 @@
 # En marge
 
-Une bibliothèque d’envies de lecture : sélection de livres, recherche Open Library,
+Une bibliothèque d’envies de lecture : sélection de livres, recherche multi-fournisseur,
 fiches détaillées, ajout manuel, modification, statuts de lecture, tags, filtres, tri et export JSON.
 L’interface existante est conservée, sur ordinateur et mobile.
 
@@ -104,7 +104,8 @@ public/
     icons.js            Icônes SVG
     i18n.js             Choix de langue et traduction de l’interface
     messages.js         Textes français et anglais
-    open-library.js     Recherche et normalisation des métadonnées
+    metadata.js         Client de l’API catalogue commune
+    open-library.js     Parseur de compatibilité historique, sans appels réseau
     reading-status.js   Statuts de lecture et valeurs par défaut
     storage.js          Validation et reprise des anciennes listes
     api.js              Client HTTP du stockage serveur
@@ -112,6 +113,7 @@ public/
 src/server.js           Serveur HTTP Bun et API
 src/database.js         Base SQLite et transactions
 src/mcp.js              Serveur MCP local (stdio)
+src/metadata/          Agrégateur, modèle, requêtes et deux connecteurs
 tests/unit/             Tests Bun
 tests/browser/          Tests Playwright
 Dockerfile
@@ -143,20 +145,80 @@ Les livres de la sélection disposent de titres, résumés, couvertures et réf�
 d’édition en français et en anglais. Le changement de langue adapte aussi leur
 affichage dans la bibliothèque, en conservant leurs statuts et tags personnels.
 
-La recherche Open Library privilégie les éditions dans la langue sélectionnée
-sans exclure les livres dont la langue est absente ou différente. Elle utilise
-le titre, la couverture et l’ISBN de l’édition correspondante lorsqu’elle existe,
-sinon ceux de l’édition proposée par Open Library. Une langue absente est
-signalée, sans être déduite de la langue de l’interface. La recherche d’une
-traduction d’un livre déjà enregistré conserve, elle, un filtre strict pour
-éviter d’associer une édition dans la mauvaise langue. Une
-recherche déjà affichée est relancée lors d’un changement de langue. Pour les
-autres livres enregistrés, les éditions correspondantes sont recherchées à
-l’ouverture et lors du changement de langue, puis mises en cache en mémoire.
-Si aucune édition n’est disponible, l’édition d’origine reste visible avec la
-mention « Édition d’origine ». Les fiches saisies manuellement conservent leur
-contenu. Les métadonnées enregistrées et l’export restent fidèles aux livres
-ajoutés ; les versions affichées ne réécrivent pas la liste.
+La recherche passe par le serveur et utilise Hardcover en priorité. Google Books
+est interrogé en repli uniquement si Hardcover est désactivé, échoue ou ne donne
+aucun résultat, y compris pour une recherche ISBN. Les éditions de la langue sélectionnée sont placées en premier dans
+chaque page, sans exclure les langues inconnues ou différentes. Un changement de
+langue relance la recherche. La pagination reste attachée au fournisseur qui a
+produit la première page.
+
+Les éditions associées explicitement à une œuvre peuvent adapter l’affichage des
+livres enregistrés. Aucun rapprochement de traduction par simple titre n’est
+réalisé. En l’absence d’édition correspondante, l’édition conservée reste affichée
+avec la mention « Édition d’origine ». Les fiches manuelles conservent leur contenu.
+L’affichage ne réécrit pas les statuts, les tags ou les livres enregistrés.
+
+## Fournisseurs de métadonnées
+
+Copier `.env.example` vers `.env` et renseigner les identifiants côté serveur :
+
+- `GOOGLE_BOOKS_API_KEY` : clé Google Books recommandée pour disposer du quota du
+  projet. Sans clé, une tentative publique est effectuée ; elle peut être refusée.
+- `HARDCOVER_API_TOKEN` : jeton personnel obtenu dans les
+  [paramètres API Hardcover](https://hardcover.app/account/api). Sans jeton, ce
+  fournisseur est désactivé. Un préfixe `Bearer` est accepté.
+- `METADATA_DISABLED_PROVIDERS` : liste séparée par des virgules des fournisseurs à
+  désactiver (`hardcover`, `google-books`).
+
+Bun lit `.env` en local ; les deux fichiers Compose transmettent ces variables au
+conteneur. Redémarrer l’application après une modification. Aucun identifiant
+n’est envoyé au navigateur ni renvoyé par l’API catalogue.
+
+Les fiches peuvent être enrichies par ISBN vérifié auprès de l’autre fournisseur,
+à leur ouverture. Les recherches textuelles et ISBN ne déclenchent pas
+d’enrichissement secondaire : Google Books reste un repli pour la recherche. Les doublons d’édition sont fusionnés par ISBN, y compris entre
+ISBN-10 et ISBN-13 équivalents ; les titres proches ne suffisent pas. Chaque champ
+renseigné dispose de sa provenance. Les relations de sagas disponibles sont
+montrées dans les fiches, avec priorité à Hardcover.
+
+Le cache SQLite est indépendant de la bibliothèque : recherches pendant 1 heure,
+fiches et recherches ISBN pendant 24 heures, résultats dégradés pendant 1 minute.
+Il survit aux redémarrages, est limité à 500 entrées et ne modifie pas la révision
+de la bibliothèque. Les erreurs complètes ne sont pas mises en cache. Les appels
+identiques simultanés sont regroupés. Les requêtes externes sont espacées par
+fournisseur, limitées dans le temps et retentées une fois pour les pannes
+transitoires ; un `429` suspend les appels selon `Retry-After`.
+
+API catalogue (lecture seule) :
+
+| Route                          | Paramètres                                                                                                        |
+| ------------------------------ | ----------------------------------------------------------------------------------------------------------------- |
+| `GET /api/catalogue/search`    | `q` (300 caractères maximum), `page` (1–100), `language` (`fr` ou `en`), `provider` facultatif pour la pagination |
+| `GET /api/catalogue/book`      | `provider`, `id` externe, `language`                                                                              |
+| `GET /api/catalogue/isbn`      | `isbn`, `language`                                                                                                |
+| `GET /api/catalogue/providers` | Aucun ; renvoie uniquement les noms et leur activation                                                            |
+
+Une recherche renvoie `{ books, total, page, hasMore, provider, warnings }`.
+`total` est l’estimation du fournisseur, avant dédoublonnage. Une fiche renvoie
+`{ book, warnings }`. Les résultats partiels restent consultables. Si tous les
+fournisseurs échouent, le serveur renvoie `503` et l’interface propose sa sélection
+locale. Une recherche vide valide renvoie une liste vide, sans inventer de livres.
+
+Les anciennes fiches Open Library conservent leurs identifiants, couvertures et
+liens historiques. Aucune recherche, traduction ou récupération de résumé
+n’appelle désormais l’API Open Library. Une ancienne fiche disposant d’un ISBN
+peut être enrichie par la nouvelle API, sans changer son identité. Les couvertures
+et références historiques continuent à pointer vers leur source d’origine ; les
+nouveaux résultats utilisent les images et liens de leur fournisseur.
+
+Les images restent hébergées par les fournisseurs : l’application ne les télécharge
+pas pour les stocker. Les crédits d’image disponibles sont affichés lorsque présents. Les conditions de chaque source restent applicables ; les
+métadonnées ne constituent pas une licence de redistribution des couvertures.
+
+Voir l’[analyse de migration](docs/migration-catalogue.md) pour les décisions,
+les limites et les étapes suivantes. Références techniques :
+[Hardcover](https://docs.hardcover.app/api/getting-started/) et
+[Google Books](https://developers.google.com/books/docs/v1/using).
 
 ## Statuts de lecture
 
@@ -327,7 +389,7 @@ complet (incluant les éventuels fichiers SQLite `-wal` et `-shm`). Avec Docker,
 sauvegarder le volume `en-marge-data`. L’export JSON reste accessible depuis
 l’icône d’information.
 
-Une connexion Internet est nécessaire pour Open Library, les couvertures et les
+Une connexion Internet est nécessaire pour les fournisseurs, les couvertures et les
 polices Google Fonts. En cas d’échec d’une recherche, la sélection locale est
 utilisée et un message l’indique.
 

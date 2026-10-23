@@ -1,7 +1,8 @@
 import { expect, test } from "./fixtures.js";
 import { readFileSync } from "node:fs";
 
-// Real Open Library response: volumes 2 and 3 have no indexed language.
+// Historical regression: volumes 2 and 3 have no indexed language.
+// Feed equivalent normalized records through the new catalogue API.
 const zorhal = JSON.parse(
   readFileSync(
     new URL("../fixtures/zorhal-search.json", import.meta.url),
@@ -18,13 +19,25 @@ for (const language of ["fr", "en"]) {
       route.abort(),
     );
     let searchURL;
-    await page.route("https://openlibrary.org/search.json?*", (route) => {
+    await page.route("**/api/catalogue/search?*", (route) => {
       searchURL = new URL(route.request().url());
-      const strict = searchURL.searchParams.get("q").includes("language:");
       return route.fulfill({
-        json: strict
-          ? { ...zorhal, numFound: 1, docs: zorhal.docs.slice(0, 1) }
-          : zorhal,
+        json: {
+          books: zorhal.docs.map((doc, index) => ({
+            id: `google-books:zorhal${index}`,
+            provider: "google-books",
+            externalId: `zorhal${index}`,
+            title: doc.editions.docs[0].title,
+            author: doc.author_name.join(", "),
+            language: index ? null : "fr",
+            isbn: doc.isbn[0],
+            sourceUrl: `https://books.google.com/books?id=zorhal${index}`,
+            tags: [],
+          })),
+          total: 3,
+          hasMore: false,
+          provider: "google-books",
+        },
       });
     });
     await page.goto("/#discover");
@@ -37,7 +50,7 @@ for (const language of ["fr", "en"]) {
       "Zorhal T.3",
     ]);
     expect(searchURL.searchParams.get("q")).toBe("Zorhal");
-    expect(searchURL.searchParams.get("lang")).toBe(language);
+    expect(searchURL.searchParams.get("language")).toBe(language);
     expect(
       await page.locator(".book-edition-note").allTextContents(),
     ).toContain(
@@ -50,7 +63,7 @@ for (const language of ["fr", "en"]) {
     await expect(page.locator("#detail-title")).toHaveText("Zorhal T.2");
     await expect(page.locator(".detail-source[href]")).toHaveAttribute(
       "href",
-      "https://openlibrary.org/books/OL61963652M",
+      "https://books.google.com/books?id=zorhal1",
     );
     await page.locator("#book-dialog .close-dialog").click();
     await second.locator(".save-book").click();

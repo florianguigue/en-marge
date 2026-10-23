@@ -5,6 +5,7 @@ import {
 } from "@modelcontextprotocol/server";
 import { openStore, validateBooks } from "./database.js";
 import { createLibraryMcpServer } from "./mcp.js";
+import { createMetadataService, CatalogueError } from "./metadata/index.js";
 
 const publicDirectory = fileURLToPath(new URL("../public/", import.meta.url));
 const files = new Map(
@@ -28,6 +29,7 @@ export function startServer({
   hostname = process.env.HOST || "127.0.0.1",
   databasePath = process.env.DATABASE_PATH || "./data/en-marge.sqlite",
   publicUrl = process.env.PUBLIC_URL,
+  metadataService,
 } = {}) {
   const publicOrigin = publicUrl ? new URL(publicUrl).origin : null;
   if (
@@ -44,6 +46,7 @@ export function startServer({
     );
   }
   const store = openStore(databasePath);
+  const catalogue = metadataService || createMetadataService({ store });
   const mcp = createMcpHandler(() => createLibraryMcpServer({ store }), {
     maxRequestBodySize: 1024 * 1024,
   });
@@ -88,6 +91,43 @@ export function startServer({
           headers.set("Cache-Control", "no-store");
           const json = (body, status = 200) =>
             Response.json(body, { status, headers });
+          if (pathname.startsWith("/api/catalogue/")) {
+            const routes = {
+              "/api/catalogue/search": "search",
+              "/api/catalogue/book": "book",
+              "/api/catalogue/isbn": "isbn",
+              "/api/catalogue/providers": "providers",
+            };
+            const action = routes[pathname];
+            if (!action) return json({ error: "Route introuvable." }, 404);
+            if (request.method !== "GET") {
+              headers.set("Allow", "GET");
+              return json({ error: "Méthode non autorisée." }, 405);
+            }
+            const params = new URL(request.url).searchParams;
+            try {
+              return json(
+                await catalogue[action]({
+                  query: params.get("q"),
+                  page: params.has("page") ? Number(params.get("page")) : 1,
+                  language: params.get("language") || "fr",
+                  provider: params.get("provider") || undefined,
+                  id: params.get("id"),
+                  isbn: params.get("isbn"),
+                }),
+              );
+            } catch (error) {
+              return json(
+                {
+                  error:
+                    error instanceof CatalogueError
+                      ? error.message
+                      : "Catalogue indisponible.",
+                },
+                error instanceof CatalogueError ? error.status : 503,
+              );
+            }
+          }
           const methods = {
             "/api/library": ["GET", "PUT"],
             "/api/library/import": ["POST"],

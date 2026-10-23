@@ -18,6 +18,11 @@ export function openStore(
       language TEXT CHECK (language IN ('fr', 'en'))
     );
     INSERT OR IGNORE INTO library (id) VALUES (1);
+    CREATE TABLE IF NOT EXISTS metadata_cache (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      expires_at INTEGER NOT NULL
+    );
   `);
   const read = () => {
     const row = db
@@ -30,6 +35,23 @@ export function openStore(
   );
   return {
     read,
+    metadataCacheGet(key, now = Date.now()) {
+      const row = db
+        .query(
+          "SELECT value FROM metadata_cache WHERE key = ? AND expires_at > ?",
+        )
+        .get(key, now);
+      return row ? JSON.parse(row.value) : null;
+    },
+    metadataCacheSet(key, value, ttlMs, now = Date.now()) {
+      db.query("DELETE FROM metadata_cache WHERE expires_at <= ?").run(now);
+      db.query(
+        "INSERT OR REPLACE INTO metadata_cache (key, value, expires_at) VALUES (?, ?, ?)",
+      ).run(key, JSON.stringify(value), now + ttlMs);
+      db.exec(
+        "DELETE FROM metadata_cache WHERE key IN (SELECT key FROM metadata_cache ORDER BY expires_at DESC LIMIT -1 OFFSET 500)",
+      );
+    },
     add: db.transaction((book) => {
       const current = read();
       const books = validateBooks([...current.books, book]);
