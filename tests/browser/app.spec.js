@@ -9,14 +9,28 @@ test.beforeEach(async ({ context }) => {
 });
 
 test("library filters, list view and server persistence", async ({ page }) => {
-  await seedLibrary(page.request, legacyBooks.slice(0, 3));
+  await seedLibrary(
+    page.request,
+    legacyBooks.slice(0, 3).map((book, index) => ({
+      ...book,
+      manual: true,
+      pages: [180, 320, 600][index],
+      status: ["to-read", "reading", "read"][index],
+    })),
+  );
   await page.goto("/");
   await expect(page.locator(".book-card")).toHaveCount(3);
-  await page.getByRole("button", { name: "Classiques", exact: true }).click();
-  await expect(page.locator(".book-card")).toHaveCount(2);
-  await page
-    .getByRole("button", { name: "Tous les livres", exact: true })
-    .click();
+  await expect(page.locator("[data-genre], #extra-genre")).toHaveCount(0);
+  await page.locator('[data-reading-filter="reading"]').click();
+  await expect(page.locator(".book-card")).toHaveCount(1);
+  await page.locator('[data-reading-filter="all"]').click();
+  await expect(page.locator(".book-card")).toHaveCount(3);
+  await page.locator("#advanced-toggle").click();
+  await page.locator("#pages-filter").selectOption("short");
+  await expect(page.locator(".book-card")).toHaveCount(1);
+  await page.locator("#pages-filter").selectOption("long");
+  await expect(page.locator(".book-card")).toHaveCount(1);
+  await page.locator("#reset-filters").click();
   await expect(page.locator(".book-card")).toHaveCount(3);
   await page.getByRole("button", { name: "Vue en liste", exact: true }).click();
   await expect(page.locator("#books")).toHaveClass("book-grid list");
@@ -33,7 +47,9 @@ test("library filters, list view and server persistence", async ({ page }) => {
   ).toBe(true);
 });
 
-test("manual add, edit, tags and JSON export", async ({ page }) => {
+test("manual add, edit, publication date, series and JSON export", async ({
+  page,
+}) => {
   await page.goto("/");
   await page
     .getByRole("button", { name: "Ajouter un livre", exact: true })
@@ -41,23 +57,34 @@ test("manual add, edit, tags and JSON export", async ({ page }) => {
   await page.locator('[name="title"]').fill("Mon livre");
   await page.locator('[name="author"]').fill("Une autrice");
   await page.locator('[name="pages"]').fill("120");
-  await page.locator('[name="tags"]').fill("Roman, Voyage");
+  await expect(page.locator('[name="tags"]')).toHaveCount(0);
+  await page.locator('[name="publishedDate"]').fill("2024-02-29");
+  await page.locator('[name="series"]').fill("Les brumes");
+  await page.locator('[name="seriesPosition"]').fill("1.5");
   await page
     .getByRole("button", { name: "Ajouter à ma bibliothèque", exact: true })
     .click();
   await page.locator("#books [data-reading-status]").selectOption("reading");
   await page.locator(".book-title").click();
   await page.getByRole("button", { name: "Modifier", exact: true }).click();
+  await expect(page.locator('[name="publishedDate"]')).toHaveValue(
+    "2024-02-29",
+  );
+  await expect(page.locator('[name="series"]')).toHaveValue("Les brumes");
+  await expect(page.locator('[name="seriesPosition"]')).toHaveValue("1.5");
   await page.locator('[name="title"]').fill("Mon livre modifié");
   await page
     .getByRole("button", { name: "Enregistrer les modifications", exact: true })
     .click();
   await page.locator(".book-title").click();
   await expect(page.locator("#detail-title")).toHaveText("Mon livre modifié");
-  await page.locator("#personal-tags").fill("Nature, Nature, Essai");
-  await page
-    .getByRole("button", { name: "Enregistrer les tags", exact: true })
-    .click();
+  await expect(page.locator(".detail-facts")).toContainText("29 février 2024");
+  await expect(page.locator(".detail-series")).toContainText(
+    "Les brumes · Tome 1.5",
+  );
+  await expect(
+    page.locator("#personal-tags, #save-tags, .detail-tags"),
+  ).toHaveCount(0);
   await page.locator("#book-dialog .close-dialog").click();
   await page
     .getByRole("button", { name: "À propos du stockage" })
@@ -69,8 +96,70 @@ test("manual add, edit, tags and JSON export", async ({ page }) => {
   const saved = JSON.parse(await readFile(await download.path(), "utf8"));
   expect(saved).toHaveLength(1);
   expect(saved[0].title).toBe("Mon livre modifié");
-  expect(saved[0].tags).toEqual(["Nature", "Essai"]);
+  expect(saved[0].publishedDate).toBe("2024-02-29");
+  expect(saved[0].series).toEqual([{ name: "Les brumes", position: 1.5 }]);
   expect(saved[0].status).toBe("reading");
+});
+
+test("series sorting orders volumes before standalone books and status sorting stays reactive", async ({
+  page,
+}) => {
+  const book = (id, title, status, series = []) => ({
+    id,
+    title,
+    status,
+    series,
+    author: "Autrice",
+    manual: true,
+    tags: ["Tag masqué"],
+  });
+  await seedLibrary(page.request, [
+    book("ten", "Tome dix", "read", [{ name: "Brumes", position: 10 }]),
+    book("single", "Livre indépendant", "reading"),
+    book("two", "Tome deux", "to-read", [{ name: "Brumes", position: 2 }]),
+    book("unknown", "Tome inconnu", "abandoned", [{ name: "Brumes" }]),
+    book("zero", "Préquelle", "to-read", [{ name: "Brumes", position: 0 }]),
+    book("other", "Autre saga", "reading", [{ name: "Aurore", position: 1 }]),
+  ]);
+  await page.goto("/");
+  await expect(page.locator('#sort option[value="year"]')).toHaveCount(0);
+  await expect(page.locator(".book-category")).toHaveCount(0);
+  await page.locator("#sort").selectOption("series");
+  await expect(page.locator(".book-title")).toHaveText([
+    "Autre saga",
+    "Préquelle",
+    "Tome deux",
+    "Tome dix",
+    "Tome inconnu",
+    "Livre indépendant",
+  ]);
+  await expect(page.locator(".book-series")).toHaveCount(5);
+  await page.getByRole("button", { name: "Vue en liste", exact: true }).click();
+  await page.locator("#sort").selectOption("status");
+  await expect(page.locator(".book-title")).toHaveText([
+    "Préquelle",
+    "Tome deux",
+    "Autre saga",
+    "Livre indépendant",
+    "Tome dix",
+    "Tome inconnu",
+  ]);
+  await page.locator('[data-reading-status="zero"]').selectOption("abandoned");
+  await expect(page.locator(".book-title")).toHaveText([
+    "Tome deux",
+    "Autre saga",
+    "Livre indépendant",
+    "Tome dix",
+    "Préquelle",
+    "Tome inconnu",
+  ]);
+  await page.locator("#library-search").fill("Brumes");
+  await expect(page.locator(".book-card")).toHaveCount(4);
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
 });
 
 test("unified catalogue results and pagination", async ({ page }) => {
@@ -225,6 +314,7 @@ test("enriched metadata and sources are displayed and saved with provider covers
           description: "Un résumé enrichi",
           pages: 321,
           publisher: "Éditeur",
+          publishedDate: "2024-09-12",
           sources,
           provenance: { pages: sources[1] },
           series: [{ name: "La saga", position: 2 }],
@@ -247,7 +337,10 @@ test("enriched metadata and sources are displayed and saved with provider covers
     "Un résumé enrichi",
   );
   await expect(page.locator(".detail-facts")).toContainText("321");
-  await expect(page.locator("#book-detail")).toContainText("La saga · 2");
+  await expect(page.locator("#book-detail")).toContainText("La saga · Tome 2");
+  await expect(page.locator(".detail-facts")).toContainText(
+    "12 septembre 2024",
+  );
   await expect(page.locator(".detail-source[href]")).toHaveAttribute(
     "href",
     book.sourceUrl,
@@ -260,6 +353,7 @@ test("enriched metadata and sources are displayed and saved with provider covers
     id: book.id,
     pages: 321,
     description: "Un résumé enrichi",
+    publishedDate: "2024-09-12",
     sources,
   });
   expect(saved.provenance.pages.provider).toBe("hardcover");

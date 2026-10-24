@@ -159,47 +159,15 @@
               data-i18n-placeholder="searchLibrary"
             />
           </label>
-          <div
-            id="reading-filters"
-            class="reading-filters"
-            role="group"
-            aria-label="Filtrer par statut de lecture"
-            hidden
-            data-i18n-aria-label="filterStatuses"
-          ></div>
           <div class="toolbar">
             <div
-              class="filters"
+              id="reading-filters"
+              class="reading-filters"
               role="group"
-              aria-label="Filtrer par genre"
-              data-i18n-aria-label="filterGenres"
-            >
-              <button
-                class="chip active"
-                data-genre="Tous"
-                data-i18n="allBooks"
-              >
-                Tous les livres</button
-              ><button class="chip" data-genre="Roman" data-i18n="novels">
-                Romans</button
-              ><button
-                class="chip"
-                data-genre="Imaginaire"
-                data-i18n="genre.Imaginaire"
-              >
-                Imaginaire</button
-              ><button class="chip" data-genre="Essai" data-i18n="essays">
-                Essais</button
-              ><button class="chip" data-genre="Classique" data-i18n="classics">
-                Classiques</button
-              ><select
-                id="extra-genre"
-                aria-label="Autres genres"
-                data-i18n-aria-label="otherGenres"
-              >
-                <option value="" data-i18n="otherGenres">Autres genres</option>
-              </select>
-            </div>
+              aria-label="Filtrer par statut de lecture"
+              hidden
+              data-i18n-aria-label="filterStatuses"
+            ></div>
             <button
               id="advanced-toggle"
               class="icon-btn filter-toggle"
@@ -258,8 +226,11 @@
                 <option value="pages" data-i18n="pageNumber">
                   Nombre de pages
                 </option>
-                <option value="year" data-i18n="sortYear">
-                  Parution récente
+                <option value="series" data-i18n="sortSeries">
+                  Saga : A → Z
+                </option>
+                <option value="status" data-i18n="sortStatus">
+                  Statut de lecture
                 </option>
               </select>
               <div
@@ -355,24 +326,28 @@
               placeholder="Ex. 320"
               data-i18n-placeholder="examplePages" /></label
           ><label
-            ><span data-i18n="year">Année de parution</span
+            ><span data-i18n="publicationDate">Date de publication</span
             ><input
-              name="year"
-              type="number"
-              min="1"
-              max="2200"
-              placeholder="Ex. 2024"
-              data-i18n-placeholder="exampleYear"
+              name="publishedDate"
+              type="date"
+              min="0001-01-01"
+              max="2200-12-31"
           /></label>
         </div>
+        <div class="form-row">
+          <label
+            ><span data-i18n="series">Saga</span
+            ><input
+              name="series"
+              maxlength="250"
+              data-i18n-placeholder="seriesPlaceholder"
+          /></label>
+          <label
+            ><span data-i18n="seriesPosition">Numéro du tome</span>
+            <input name="seriesPosition" type="number" min="0" step="any" />
+          </label>
+        </div>
         <label
-          ><span data-i18n="tagsComma">Tags, séparés par des virgules</span
-          ><input
-            name="tags"
-            maxlength="250"
-            placeholder="Roman, Voyage, Japon…"
-            data-i18n-placeholder="tagsPlaceholder" /></label
-        ><label
           ><span data-i18n="summary">Résumé</span
           ><textarea
             name="description"

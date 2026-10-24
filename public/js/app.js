@@ -33,7 +33,7 @@ import {
   pluralKey,
   bookCount,
   pageCount,
-  genreLabel,
+  formatPublicationDate,
   applyTranslations,
 } from "./i18n.js";
 
@@ -104,7 +104,6 @@ const initialRoute = readRoute();
 let inputTimer;
 let state = {
   page: initialRoute.page,
-  genre: "Tous",
   pages: "all",
   readingStatus: "all",
   query: initialRoute.query,
@@ -284,6 +283,25 @@ function bindImageFallback(root = document) {
     );
   });
 }
+function seriesLabel(series) {
+  return `${esc(series.name)}${series.position != null ? ` · ${esc(t("seriesVolume", { position: series.position }))}` : ""}`;
+}
+function compareTitles(a, b) {
+  return a.title.localeCompare(b.title, getLocale());
+}
+function compareSeries(a, b) {
+  const first = a.series?.[0];
+  const second = b.series?.[0];
+  if (!first || !second)
+    return (
+      Number(Boolean(second)) - Number(Boolean(first)) || compareTitles(a, b)
+    );
+  return (
+    first.name.localeCompare(second.name, getLocale()) ||
+    (first.position ?? Infinity) - (second.position ?? Infinity) ||
+    compareTitles(a, b)
+  );
+}
 function card(b, i) {
   const added = isSaved(b);
   return `<article class="book-card">
@@ -296,10 +314,10 @@ function card(b, i) {
     <button class="icon-btn save-book ${added ? "saved" : ""}" data-save="${esc(b.id)}"
       aria-label="${esc(t(added ? "removeBookLabel" : "addBookLabel", { title: bookName(b) }))}" aria-pressed="${added}">${icon(added ? "check" : "plus")}</button>
     <div class="book-info">
-      <span class="book-category">${esc(genreLabel((b.tags || [])[0] || "À découvrir"))}</span>
       <button class="book-title" data-detail="${esc(b.id)}">${esc(bookName(b))}</button>
       <p class="book-author">${esc(bookAuthor(b))}</p>
-      <div class="book-meta"><span>${b.pages ? pageCount(b.pages) : t("pagesUnknown")}</span>${b.year ? `<span>${esc(b.year)}</span>` : ""}</div>
+      ${b.series?.length ? `<p class="book-series">${esc(t("series"))} : ${b.series.map(seriesLabel).join("<br>")}</p>` : ""}
+      <div class="book-meta"><span>${b.pages ? pageCount(b.pages) : t("pagesUnknown")}</span>${b.publishedDate || b.year ? `<span>${esc(formatPublicationDate(b))}</span>` : ""}</div>
       ${b.originalEdition ? `<span class="book-edition-note">${t(b.language ? "originalEdition" : "editionLanguageUnknown")}</span>` : ""}
       ${state.page === "wishlist" ? readingStatusControl(b) : ""}
     </div>
@@ -307,9 +325,12 @@ function card(b, i) {
 }
 function sourceBooks() {
   const language = getLanguage();
-  if (state.page === "wishlist")
-    return saved.map((book) => localizeBook(book, language));
-  return state.remote?.map((book) => localizeBook(book, language)) || [];
+  return (state.page === "wishlist" ? saved : state.remote || []).map(
+    (book) => ({
+      ...localizeBook(book, language),
+      ...metadataDetails.get(`${book.id}:${language}`),
+    }),
+  );
 }
 function filtered() {
   let books = sourceBooks().filter((b) => {
@@ -323,15 +344,13 @@ function filtered() {
       state.page === "wishlist" &&
       state.libraryQuery &&
       !normal(
-        [b.title, b.author, b.isbn, ...b.tags, ...b.tags.map(genreLabel)].join(
-          " ",
-        ),
+        [
+          b.title,
+          b.author,
+          b.isbn,
+          ...(b.series || []).map((series) => series.name),
+        ].join(" "),
       ).includes(normal(state.libraryQuery))
-    )
-      return false;
-    if (
-      state.genre !== "Tous" &&
-      !b.tags?.some((t) => normal(t) === normal(state.genre))
     )
       return false;
     const n = Number(b.pages);
@@ -346,8 +365,16 @@ function filtered() {
     books.sort((a, b) => a.author.localeCompare(b.author, getLocale()));
   if (state.sort === "pages")
     books.sort((a, b) => (a.pages || Infinity) - (b.pages || Infinity));
-  if (state.sort === "year")
-    books.sort((a, b) => (b.year || 0) - (a.year || 0));
+  if (state.sort === "series") books.sort(compareSeries);
+  if (state.sort === "status") {
+    const statuses = Object.keys(READING_STATUSES);
+    books.sort(
+      (a, b) =>
+        statuses.indexOf(normalizeReadingStatus(a.status)) -
+          statuses.indexOf(normalizeReadingStatus(b.status)) ||
+        compareTitles(a, b),
+    );
+  }
   if (state.sort === "default" && state.page === "wishlist")
     books.sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0));
   return books;
@@ -376,19 +403,7 @@ function render() {
   $('#sort option[value="default"]').textContent = wish
     ? t("recentlyAdded")
     : t("relevance");
-  $$("[data-genre]").forEach((b) =>
-    b.classList.toggle("active", b.dataset.genre === state.genre),
-  );
-  const fixed = ["Tous", "Roman", "Imaginaire", "Essai", "Classique"];
-  const extra = [...new Set(sourceBooks().flatMap((b) => b.tags || []))]
-    .filter((t) => !fixed.includes(t))
-    .sort((a, b) => genreLabel(a).localeCompare(genreLabel(b), getLocale()));
-  $("#extra-genre").innerHTML =
-    `<option value="">${t("otherGenres")}</option>` +
-    extra
-      .map((t) => `<option value="${esc(t)}">${esc(genreLabel(t))}</option>`)
-      .join("");
-  $("#extra-genre").value = fixed.includes(state.genre) ? "" : state.genre;
+  $('#sort option[value="status"]').hidden = !wish;
   renderReadingFilters();
   const books = filtered();
   const booksLabel = bookCount(books.length);
@@ -427,7 +442,6 @@ function navigate(page = "wishlist") {
   state = {
     ...state,
     page,
-    genre: "Tous",
     query: "",
     libraryQuery: "",
     pages: "all",
@@ -528,22 +542,15 @@ function showDetail(id, open = true) {
       <div class="eyebrow">${t(b.manual ? "personalBook" : "discoverStory")}</div>
       <h2 id="detail-title">${esc(bookName(b))}</h2><p class="detail-author">${esc(bookAuthor(b))}</p>
       ${b.originalEdition ? `<span class="detail-source">${t(b.language ? "originalEdition" : "editionLanguageUnknown")}</span>` : ""}
-      <div class="detail-tags">${(b.tags || []).map((tag) => `<span class="chip">${esc(genreLabel(tag))}</span>`).join("")}</div>
       <dl class="detail-facts">
         <div><dt>${t("pageNumber")}</dt><dd>${b.pages ? pageCount(b.pages) : t("notProvided")}</dd></div>
-        <div><dt>${t("firstPublication")}</dt><dd>${b.year ? esc(b.year) : t("yearUnknown")}</dd></div>
+        <div><dt>${t("publicationDate")}</dt><dd>${esc(formatPublicationDate(b))}</dd></div>
         <div><dt>ISBN</dt><dd>${esc(b.isbn || t("notProvided"))}</dd></div>
         <div><dt>${t("publisher")}</dt><dd>${esc(b.publisher || t("notProvided"))}</dd></div>
+        ${b.series?.length ? `<div class="detail-series"><dt>${t("series")}</dt><dd>${b.series.map(seriesLabel).join("<br>")}</dd></div>` : ""}
       </dl>
       <h3>${t("aboutBook")}</h3><p class="description" id="detail-description">${esc(b.description || t("noSummary"))}</p>
-      ${b.series?.length ? `<h3>${t("series")}</h3><p>${b.series.map((series) => `${esc(series.name)}${series.position != null ? ` · ${esc(series.position)}` : ""}`).join("<br>")}</p>` : ""}
-      ${
-        added
-          ? `${readingStatusControl(localizeBook(findSaved(b), getLanguage()))}
-        <label class="personal-label">${t("personalTags")}<input class="personal-tags" id="personal-tags" value="${esc(b.tags.join(", "))}" maxlength="250" placeholder="${t("personalTagsPlaceholder")}"></label>
-        <button class="text-btn" id="save-tags">${t("saveTags")}</button>`
-          : ""
-      }
+      ${added ? readingStatusControl(localizeBook(findSaved(b), getLanguage())) : ""}
       <div class="detail-actions">
         <button class="primary" data-save="${esc(b.id)}">${icon(added ? "check" : "plus")}${t(added ? "removeFromLibrary" : "addToLibrary")}</button>
         ${b.manual ? `<button class="secondary" id="edit-manual">${t("edit")}</button>` : ""}
@@ -576,7 +583,7 @@ async function loadDetails(b) {
         normalizeIsbn(b.isbn) === normalizeIsbn(details.isbn));
     metadataDetails.set(key, {
       description: details.description || b.description,
-      series: details.series,
+      series: details.series?.length ? details.series : b.series,
       sources: details.sources,
       provenance: details.provenance,
       externalIds: { ...b.externalIds, ...details.externalIds },
@@ -585,6 +592,10 @@ async function loadDetails(b) {
             pages: b.pages || details.pages,
             publisher: b.publisher || details.publisher,
             year: b.year || details.year,
+            publishedDate:
+              details.publishedDate?.length > (b.publishedDate?.length || 0)
+                ? details.publishedDate
+                : b.publishedDate,
             coverUrl: b.coverUrl || details.coverUrl,
             imageCredits: b.coverUrl ? b.imageCredits : details.imageCredits,
             author:
@@ -595,12 +606,10 @@ async function loadDetails(b) {
           }
         : {}),
     });
-    if (
-      getLanguage() === language &&
-      detailId === b.id &&
-      $("#book-dialog").open
-    )
-      refreshOpenDetail();
+    if (getLanguage() === language) {
+      render();
+      if (detailId === b.id && $("#book-dialog").open) refreshOpenDetail();
+    }
   } catch {}
 }
 async function search(more = false) {
@@ -611,7 +620,6 @@ async function search(more = false) {
     return;
   }
   if (state.page !== "search") {
-    state.genre = "Tous";
     state.pages = "all";
     state.readingStatus = "all";
     state.sort = "default";
@@ -676,7 +684,6 @@ async function search(more = false) {
 }
 function resetFilters() {
   state.readingStatus = "all";
-  state.genre = "Tous";
   state.pages = "all";
   $("#pages-filter").value = "all";
   state.libraryQuery = "";
@@ -690,12 +697,7 @@ function updateManualLabels() {
     t(editingId ? "saveChanges" : "addToLibrary");
 }
 function refreshOpenDetail() {
-  if (detailId && $("#book-dialog").open) {
-    const tags = $("#personal-tags")?.value;
-    showDetail(detailId, false);
-    if (tags !== undefined && $("#personal-tags"))
-      $("#personal-tags").value = tags;
-  }
+  if (detailId && $("#book-dialog").open) showDetail(detailId, false);
 }
 async function refreshSavedEditions() {
   editionController?.abort();
@@ -749,9 +751,16 @@ function manualOpen(b) {
   const form = $("#manual-form");
   form.reset();
   if (b) {
-    for (const k of ["title", "author", "pages", "year", "description"])
+    for (const k of [
+      "title",
+      "author",
+      "pages",
+      "publishedDate",
+      "description",
+    ])
       form.elements[k].value = b[k] || "";
-    form.elements.tags.value = b.tags.join(", ");
+    form.elements.series.value = b.series?.[0]?.name || "";
+    form.elements.seriesPosition.value = b.series?.[0]?.position ?? "";
   }
   updateManualLabels();
   openDialog("#manual-dialog");
@@ -760,7 +769,6 @@ document.addEventListener("click", async (e) => {
   const detail = e.target.closest("[data-detail]");
   const saveButton = e.target.closest("[data-save]");
   const nav = e.target.closest("[data-nav]");
-  const genre = e.target.closest("[data-genre]");
   const readingFilter = e.target.closest("[data-reading-filter]");
   if (readingFilter) {
     state.readingStatus = readingFilter.dataset.readingFilter;
@@ -772,33 +780,11 @@ document.addEventListener("click", async (e) => {
   if (detail) showDetail(detail.dataset.detail);
   if (saveButton) toggleSave(saveButton.dataset.save);
   if (nav) navigate(nav.dataset.nav);
-  if (genre) {
-    state.genre = genre.dataset.genre;
-    render();
-  }
   if (e.target.closest(".close-dialog")) e.target.closest("dialog").close();
   if (e.target.closest("#empty-action")) {
     if (state.page === "wishlist" && !saved.length) $("#search").focus();
     else if (state.notice === "searchUnavailable") search();
     else resetFilters();
-  }
-  if (e.target.closest("#save-tags")) {
-    const input = $("#personal-tags");
-    const tags = [
-      ...new Set(
-        input.value
-          .split(",")
-          .map((t) => t.trim())
-          .filter(Boolean),
-      ),
-    ].slice(0, 15);
-    if (
-      await save(saved.map((b) => (b.id === detailId ? { ...b, tags } : b)))
-    ) {
-      render();
-      showDetail(detailId, false);
-      toast("tagsSaved");
-    }
   }
   if (e.target.closest("#edit-manual")) {
     const b = find(detailId);
@@ -842,7 +828,6 @@ $("#search").addEventListener("input", () => {
     return;
   }
   if (state.page !== "search") {
-    state.genre = "Tous";
     state.pages = "all";
     state.readingStatus = "all";
     state.sort = "default";
@@ -877,10 +862,6 @@ $("#pages-filter").onchange = (e) => {
   state.pages = e.target.value;
   render();
 };
-$("#extra-genre").onchange = (e) => {
-  state.genre = e.target.value || "Tous";
-  render();
-};
 $("#advanced-toggle").onclick = () => {
   const open = $("#advanced").hidden;
   $("#advanced").hidden = !open;
@@ -911,22 +892,32 @@ $("#manual-form").onsubmit = async (e) => {
     return;
   }
   const old = editingId ? saved.find((b) => b.id === editingId) : null;
+  const publishedDate = data.get("publishedDate");
+  const series = data.get("series").trim();
+  const position = data.get("seriesPosition");
   const book = {
     ...(old || {}),
     id: editingId || "manual:" + crypto.randomUUID(),
     title,
     author,
     pages: Number(data.get("pages")) || null,
-    year: Number(data.get("year")) || null,
-    tags: [
-      ...new Set(
-        data
-          .get("tags")
-          .split(",")
-          .map((t) => t.trim())
-          .filter(Boolean),
-      ),
-    ].slice(0, 15),
+    publishedDate:
+      publishedDate ||
+      (/^\d{4}(?:-\d{2})?$/.test(old?.publishedDate || "")
+        ? old.publishedDate
+        : null),
+    year: publishedDate
+      ? Number(publishedDate.slice(0, 4))
+      : /^\d{4}-\d{2}-\d{2}$/.test(old?.publishedDate || "")
+        ? null
+        : old?.year || null,
+    tags: old?.tags || [],
+    series: series
+      ? [
+          { name: series, position: position === "" ? null : Number(position) },
+          ...(old?.series?.slice(1) || []),
+        ]
+      : [],
     description: data.get("description").trim(),
     manual: true,
     addedAt: old?.addedAt || Date.now(),

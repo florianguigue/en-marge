@@ -69,11 +69,27 @@ export function pageCount(count) {
   return t(pluralKey("pageCount", count), { count: formatNumber(count) });
 }
 
-export function genreLabel(genre) {
-  return (
-    messages[language][`genre.${genre}`] ??
-    (genre === "À découvrir" ? t("toDiscover") : genre)
+export function formatPublicationDate(book) {
+  const match = /^(\d{4})(?:-(\d{2})(?:-(\d{2}))?)?$/.exec(
+    book.publishedDate || "",
   );
+  if (match) {
+    const [, year, month, day] = match;
+    const date = new Date(`${year}-${month || "01"}-${day || "01"}T00:00:00Z`);
+    if (
+      !Number.isNaN(date.getTime()) &&
+      date.getUTCFullYear() === Number(year) &&
+      date.getUTCMonth() + 1 === Number(month || 1) &&
+      date.getUTCDate() === Number(day || 1)
+    )
+      return new Intl.DateTimeFormat(getLocale(), {
+        year: "numeric",
+        ...(month ? { month: "long" } : {}),
+        ...(day ? { day: "numeric" } : {}),
+        timeZone: "UTC",
+      }).format(date);
+  }
+  return book.year ? String(book.year) : t("yearUnknown");
 }
 
 export function applyTranslations(root = document) {

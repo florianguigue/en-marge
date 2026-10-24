@@ -75,6 +75,8 @@ const edition = (language) => ({
   author: "An Author",
   language,
   tags: [],
+  publishedDate: language === "en" ? "2024-02-29" : "2025-03-06",
+  series: [{ name: "Mists", position: 2 }],
   isbn: language === "en" ? "9780547928227" : "9782070612888",
   coverUrl: `https://example.org/${language}.jpg`,
   sourceUrl: "https://hardcover.app/books/mists",
@@ -84,7 +86,7 @@ const edition = (language) => ({
       : "Un résumé en français.",
 });
 
-test("search and saved works use matching editions, retaining status and tags across languages", async ({
+test("search and saved works use matching edition dates, retaining status across languages", async ({
   page,
 }) => {
   const requests = [];
@@ -113,6 +115,7 @@ test("search and saved works use matching editions, retaining status and tags ac
   await page.locator("#search").fill("Mists");
   await page.locator("#search-form").evaluate((form) => form.requestSubmit());
   await expect(page.locator(".book-title")).toHaveText("The Book of Mists");
+  await expect(page.locator(".book-meta")).toContainText("February 29, 2024");
   expect(requests[0].searchParams.get("q")).toBe("Mists");
   expect(requests[0].searchParams.get("language")).toBe("en");
   await page.locator(".book-title").click();
@@ -124,13 +127,11 @@ test("search and saved works use matching editions, retaining status and tags ac
   await page.locator(".save-book").click();
   await page.locator('[data-nav="wishlist"]').click();
   await page.locator("#books [data-reading-status]").selectOption("read");
-  await page.locator(".book-title").click();
-  await page.locator("#personal-tags").fill("Favori");
-  await page.locator("#save-tags").click();
-  await page.locator("#book-dialog .close-dialog").click();
   const saved = (await (await page.request.get("/api/library")).json()).books;
   await page.locator("#language-select").selectOption("fr");
   await expect(page.locator(".book-title")).toHaveText("Le Livre des brumes");
+  await expect(page.locator(".book-meta")).toContainText("6 mars 2025");
+  await expect(page.locator(".book-series")).toContainText("Mists · Tome 2");
   await expect(page.locator("#books [data-reading-status]")).toHaveValue(
     "read",
   );
@@ -142,7 +143,10 @@ test("search and saved works use matching editions, retaining status and tags ac
     ),
   ).toBe(true);
   await page.locator(".book-title").click();
-  await expect(page.locator("#personal-tags")).toHaveValue("Favori");
+  await expect(
+    page.locator("#personal-tags, #save-tags, .detail-tags"),
+  ).toHaveCount(0);
+  await expect(page.locator(".detail-facts")).toContainText("6 mars 2025");
   await expect(page.locator("#detail-description")).toHaveText(
     "Un résumé en français.",
   );

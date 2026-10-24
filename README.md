@@ -1,7 +1,7 @@
 # En marge
 
 Une bibliothèque d’envies de lecture : recherche multi-fournisseur,
-fiches détaillées, ajout manuel, modification, statuts de lecture, tags, filtres, tri et export JSON.
+fiches détaillées, ajout manuel, modification, statuts de lecture, sagas, filtres, tri et export JSON.
 L’interface existante est conservée, sur ordinateur et mobile.
 
 L’application est écrite en JavaScript natif : modules ES côté navigateur et serveur
@@ -84,7 +84,7 @@ bun run test:e2e      # parcours Chromium sur ordinateur et mobile
 ```
 
 Les tests navigateur couvrent les ajouts/retraits, la persistance après
-actualisation, l’annulation d’un retrait, les fiches manuelles, les tags, l’export,
+actualisation, l’annulation d’un retrait, les fiches manuelles, les dates de publication, les sagas, l’export,
 la recherche, la pagination, le repli local et l’annulation d’une recherche.
 Ils vérifient aussi le partage entre navigateurs indépendants, la reprise des
 anciennes listes et les pannes du serveur. Les tests Bun vérifient la persistance
@@ -166,6 +166,19 @@ livres enregistrés. Aucun rapprochement de traduction par simple titre n’est
 réalisé. En l’absence d’édition correspondante, l’édition conservée reste affichée
 avec la mention « Édition d’origine ». Les fiches manuelles conservent leur contenu.
 L’affichage ne réécrit pas les statuts, les tags ou les livres enregistrés.
+
+Les cartes et les fiches affichent la date de publication complète de l’édition
+quand elle est connue (par exemple « 12 septembre 2024 »). Si la source ne fournit
+qu’un mois ou une année, cette précision est conservée. Le nom de la saga et le
+numéro du tome apparaissent lorsque les métadonnées les renseignent ; ils peuvent
+aussi être saisis sur une fiche manuelle. Le filtre de la bibliothèque recherche
+également les noms de sagas.
+
+Le tri par saga classe les sagas par nom puis leurs tomes par numéro, avec les
+livres sans saga à la fin. Le tri par statut suit l’ordre « À lire », « En cours »,
+« Lu », « Abandonné ». Le tri « Parution récente » et les tags des cartes, des
+fiches et du formulaire manuel ont été retirés, ainsi que les filtres par genre
+basés sur les tags. Les filtres par statut et longueur restent disponibles.
 
 ## Fournisseurs de métadonnées
 

@@ -8,6 +8,7 @@ import {
   t,
   bookCount,
   pageCount,
+  formatPublicationDate,
 } from "../../public/js/i18n.js";
 import { messages } from "../../public/js/messages.js";
 
@@ -68,4 +69,29 @@ test("both dictionaries contain every interface key and the same placeholders", 
   )) {
     expect(Object.hasOwn(messages.fr, key)).toBe(true);
   }
+});
+
+test("publication dates respect source precision, calendar validity and language", () => {
+  expect(
+    formatPublicationDate({ publishedDate: "2024-02-29", year: 2024 }),
+  ).toBe("29 février 2024");
+  expect(formatPublicationDate({ publishedDate: "2024-03-01" })).toBe(
+    "1 mars 2024",
+  );
+  expect(formatPublicationDate({ publishedDate: "2024-02" })).toBe(
+    "février 2024",
+  );
+  expect(formatPublicationDate({ publishedDate: "2024" })).toBe("2024");
+  expect(formatPublicationDate({ year: 1998 })).toBe("1998");
+  expect(
+    formatPublicationDate({ publishedDate: "2023-02-29", year: 2023 }),
+  ).toBe("2023");
+  expect(formatPublicationDate({ publishedDate: "2024-13-01" })).toBe(
+    "Non renseignée",
+  );
+  expect(formatPublicationDate({})).toBe("Non renseignée");
+  setLanguage("en");
+  expect(formatPublicationDate({ publishedDate: "2024-02-29" })).toBe(
+    "February 29, 2024",
+  );
 });

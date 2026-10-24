@@ -61,6 +61,7 @@ export function localizeBook(book, language) {
     workKey: book.workKey,
     status: book.status,
     tags: book.tags,
+    series: book.series?.length ? book.series : variant.series || [],
     translations: {
       ...(book.language ? { [book.language]: editionMetadata(book) } : {}),
       ...book.translations,

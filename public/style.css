@@ -313,16 +313,10 @@ h1 em {
 }
 .toolbar {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
+  justify-content: flex-end;
+  align-items: flex-start;
   gap: 10px;
   margin: 19px 0;
-}
-.filters {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-  align-items: center;
 }
 .chip {
   font-size: 11px;
@@ -345,14 +339,6 @@ h1 em {
 .chip.active:hover {
   background: #645442;
   color: #fff8eb;
-}
-.filters select {
-  max-width: 160px;
-  font-size: 10px;
-  border: 0;
-  background: transparent;
-  color: #827059;
-  padding: 8px 6px;
 }
 .icon-btn {
   display: inline-grid;
@@ -554,13 +540,15 @@ h1 em {
   width: 15px;
   height: 15px;
 }
-.book-category {
-  font-size: 8px;
-  text-transform: uppercase;
-  letter-spacing: 1.3px;
+.book-info {
+  padding-top: 16px;
+}
+.book-series {
+  font-size: 10px;
+  line-height: 1.5;
   color: #987a53;
-  display: block;
-  margin: 16px 0 7px;
+  margin: 0 0 10px;
+  overflow-wrap: anywhere;
 }
 .book-title {
   font: 26px/1.02 var(--serif);
@@ -586,6 +574,7 @@ h1 em {
   font-size: 9px;
   color: #9a876e;
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
 }
 .book-meta span + span:before {
@@ -807,18 +796,6 @@ dialog::backdrop {
   color: #8b775c;
   margin-bottom: 20px;
 }
-.detail-tags {
-  display: flex;
-  gap: 5px;
-  flex-wrap: wrap;
-}
-.detail-tags .chip {
-  background: #eae1d0;
-  padding: 5px 8px;
-  font-size: 9px;
-  color: #8b704c;
-  cursor: default;
-}
 .detail-facts {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -839,6 +816,10 @@ dialog::backdrop {
   margin: 0;
   overflow-wrap: anywhere;
 }
+.detail-series {
+  grid-column: 1 / -1;
+  line-height: 1.6;
+}
 .detail-content h3 {
   font-size: 11px;
   font-weight: 600;
@@ -848,23 +829,6 @@ dialog::backdrop {
   color: #7e6e58;
   line-height: 1.9;
   white-space: pre-line;
-}
-.personal-label {
-  font-size: 10px;
-  display: block;
-  margin-top: 17px;
-  color: #8c7554;
-}
-.personal-tags {
-  display: block;
-  width: 100%;
-  margin-top: 7px;
-  padding: 10px;
-  font-size: 11px;
-  color: var(--ink);
-  background: #fffaf1;
-  border: 1px solid #d7c8ae;
-  border-radius: 3px;
 }
 .detail-actions {
   display: flex;
@@ -1100,13 +1064,6 @@ dialog::backdrop {
   .cover-placeholder {
     width: 121px;
   }
-  .filters {
-    gap: 2px;
-  }
-  .filters select {
-    font-size: 9px;
-    max-width: 130px;
-  }
   .chip {
     padding: 8px;
   }
@@ -1245,13 +1202,6 @@ dialog::backdrop {
   .toolbar {
     gap: 7px;
     align-items: flex-start;
-  }
-  .filters {
-    gap: 3px;
-  }
-  .filters select {
-    max-width: 126px;
-    font-size: 10px;
   }
   .chip {
     padding: 7px 9px;
@@ -1407,10 +1357,6 @@ dialog::backdrop {
     font-size: 9px;
     padding: 7px 8px;
   }
-  .filters select {
-    max-width: 118px;
-    font-size: 9px;
-  }
   .searchbar {
     min-height: 52px;
   }
@@ -1469,12 +1415,14 @@ dialog::backdrop {
 
 .reading-filters {
   display: flex;
+  flex: 1;
+  min-width: 0;
   flex-wrap: wrap;
   gap: 6px;
-  margin-top: 20px;
 }
 .reading-filter {
   border-color: var(--line);
+  min-height: 33px;
 }
 .reading-count {
   margin-left: 5px;
